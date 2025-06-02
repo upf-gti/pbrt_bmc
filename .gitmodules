@@ -36,3 +36,6 @@
 	path = src/ext/glfw
 	url = https://github.com/glfw/glfw.git
 
+[submodule "src/ext/gprender"]
+	path = src/ext/gprender
+	url = https://github.com/upf-gti/GPRender.git
