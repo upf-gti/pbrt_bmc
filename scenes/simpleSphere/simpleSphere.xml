@@ -1,0 +1,23 @@
+LookAt 0.0 0.0 -3.0 # eye
+       0.0 0.0 0.0 	# look at point
+       0 1 0    # up vector
+Camera "perspective" "float fov" 60
+
+Sampler "independent" "integer pixelsamples" 1
+Integrator "volpath"
+Film "rgb" "string filename" "simple.png"
+     "integer xresolution" [1280] "integer yresolution" [720]
+
+WorldBegin
+
+AttributeBegin
+    Rotate 90 0 1 0
+    Rotate -90 1 0 0
+    LightSource "infinite"
+        "string filename" "hdrs/sky.exr"
+AttributeEnd
+
+AttributeBegin
+	Material "dielectric"
+	Shape "sphere" "float radius" 1
+AttributeEnd
