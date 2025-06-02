@@ -40,6 +40,9 @@
 #include <pbrt/util/stats.h>
 #include <pbrt/util/string.h>
 
+#include "GPRender/src/bmc.h"
+#include "GPRender/src/cov_kernels.h"
+
 #include <algorithm>
 
 namespace pbrt {
@@ -3646,6 +3649,36 @@ std::string FunctionIntegrator::ToString() const {
         outputFilename, camera, baseSampler);
 }
 
+BMCIntegrator::BMCIntegrator(int maxDepth, bool sampleLights, bool sampleBSDF,
+                             Camera camera, Sampler sampler, Primitive aggregate,
+                             std::vector<Light> lights)
+    : RayIntegrator(camera, sampler, aggregate, lights), maxDepth(maxDepth) {}
+
+SampledSpectrum BMCIntegrator::Li(RayDifferential ray, SampledWavelengths &lambda,
+                                  Sampler sampler, ScratchBuffer &scratchBuffer,
+                                  VisibleSurface *visibleSurface) const {
+    // Estimate radiance along ray using simple path tracing
+    SampledSpectrum L(1.f), beta(1.f);
+    bool specularBounce = true;
+    int depth = 0;
+
+    return L;
+}
+
+std::unique_ptr<BMCIntegrator> BMCIntegrator::Create(
+    const ParameterDictionary &parameters, Camera camera, Sampler sampler,
+    Primitive aggregate, std::vector<Light> lights, const FileLoc *loc) {
+    int maxDepth = parameters.GetOneInt("maxdepth", 5);
+    bool sampleLights = parameters.GetOneBool("samplelights", true);
+    bool sampleBSDF = parameters.GetOneBool("samplebsdf", true);
+    return std::make_unique<BMCIntegrator>(maxDepth, sampleLights, sampleBSDF,
+                                                  camera, sampler, aggregate, lights);
+}
+
+std::string BMCIntegrator::ToString() const {
+    return StringPrintf("[ BayisianMonteCarloIntegrator maxDepth: %d]", maxDepth);
+}
+
 std::unique_ptr<Integrator> Integrator::Create(
     const std::string &name, const ParameterDictionary &parameters, Camera camera,
     Sampler sampler, Primitive aggregate, std::vector<Light> lights,
@@ -3682,6 +3715,9 @@ std::unique_ptr<Integrator> Integrator::Create(
     else if (name == "sppm")
         integrator = SPPMIntegrator::Create(parameters, colorSpace, camera, sampler,
                                             aggregate, lights, loc);
+    else if (name == "bmc")
+        integrator = BMCIntegrator::Create(parameters, camera, sampler, aggregate,
+                                                  lights, loc);
     else
         ErrorExit(loc, "%s: integrator type unknown.", name);
 

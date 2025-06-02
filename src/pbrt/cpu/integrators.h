@@ -501,6 +501,28 @@ class FunctionIntegrator : public Integrator {
     std::string imageFilename;
 };
 
+// BayisianMonteCarloIntegrator Definition
+class BMCIntegrator : public RayIntegrator {
+  public:
+    // BayisianMonteCarloIntegrator Public Methods
+    BMCIntegrator(int maxDepth, bool sampleLights, bool sampleBSDF, Camera camera,
+                         Sampler sampler, Primitive aggregate, std::vector<Light> lights);
+
+    SampledSpectrum Li(RayDifferential ray, SampledWavelengths &lambda, Sampler sampler,
+                       ScratchBuffer &scratchBuffer,
+                       VisibleSurface *visibleSurface) const;
+
+    static std::unique_ptr<BMCIntegrator> Create(
+        const ParameterDictionary &parameters, Camera camera, Sampler sampler,
+        Primitive aggregate, std::vector<Light> lights, const FileLoc *loc);
+
+    std::string ToString() const;
+
+  private:
+    // BayisianMonteCarloIntegrator Private Members
+    int maxDepth;
+};
+
 }  // namespace pbrt
 
 #endif  // PBRT_CPU_INTEGRATORS_H
