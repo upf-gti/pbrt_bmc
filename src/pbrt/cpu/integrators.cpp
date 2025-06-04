@@ -3702,10 +3702,75 @@ BMCIntegrator::BMCIntegrator(int maxDepth, bool sampleLights, bool sampleBSDF,
 SampledSpectrum BMCIntegrator::Li(RayDifferential ray, SampledWavelengths &lambda,
                                   Sampler sampler, ScratchBuffer &scratchBuffer,
                                   VisibleSurface *visibleSurface) const {
+    return LiRecursive(ray, lambda, sampler, scratchBuffer, visibleSurface);
+}
+
+SampledSpectrum BMCIntegrator::LiRecursive(RayDifferential ray,
+                                           SampledWavelengths &lambda, Sampler sampler,
+                                           ScratchBuffer &scratchBuffer,
+                                           VisibleSurface *visibleSurface) const {
+
     // Estimate radiance along ray using simple path tracing
     SampledSpectrum L(0.f), beta(1.f);
-    bool specularBounce = true;
     int depth = 0;
+
+    // Intersect _ray_ with scene
+    pstd::optional<ShapeIntersection> si = Intersect(ray);
+
+    // Account for infinite lights (i.e. environment) if ray has no intersection
+    if (!si) {
+        for (const auto &light : infiniteLights)
+            L += beta * light.Le(ray, lambda);
+        return L;
+    }
+
+    // End path if maximum depth reached
+    if (depth++ == maxDepth)
+        return L;
+
+    // Pick a random BMC Gaussian Process
+    uint32_t randomGP = rand() % num_bmcs;
+    BMC<Vector3f, SampledSpectrum> *bmc = bmc_list[randomGP];
+
+    // Store the radiance of each random direction
+    std::vector<SampledSpectrum> radianceSamples;
+
+    // Random angle to rotate the GP directions
+    Float alpha = 2.0 * PI * rand() / (Float)RAND_MAX;
+
+    SurfaceInteraction &isect = si->intr;
+
+    // Get BSDF and skip over medium boundaries
+    BSDF bsdf = isect.GetBSDF(ray, lambda, camera, scratchBuffer, sampler);
+    // if (!bsdf) {
+    //     specularBounce = true;
+    //     isect.SkipIntersection(&ray, si->tHit);
+    //     continue;
+    // }
+
+    Vector3f wiWorld = -ray.d;
+
+    // Loop for each random directions computed in the preprocess step
+    for (uint32_t sIdx = 0; sIdx < num_shading_samples; sIdx++) {
+        Vector3f wo = bmc->get_gaussian_process()->get_observation(sIdx);
+        // Rotate to get different directions each sample/pixel/intersection (with
+        // same covariance matrix)
+        Vector3f woLocal = rotate_around_z(wo, alpha);
+        // Rotate to align hemisphere directions to intersection normal
+
+        Vector3 woWorld = Normalize(bsdf.LocalToRender(wo));
+
+        // Evaluate BSDF at surface for sampled direction
+        SampledSpectrum bsdfVal = bsdf.f(woWorld, wiWorld);  // reflectance * cosine term
+
+        // Recursively trace ray to estimate incident radiance at surface
+        RayDifferential nextRay = isect.SpawnRay(woWorld);
+
+        // Store each color retrieved from every direction in an array
+        radianceSamples.push_back(LiRecursive(nextRay, lambda, sampler, scratchBuffer, visibleSurface) * bsdfVal);
+    }
+
+    L += bmc->compute_integral(radianceSamples);
 
     return L;
 }

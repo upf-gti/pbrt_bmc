@@ -4,7 +4,7 @@ LookAt 0.0 0.0 -3.0 # eye
 Camera "perspective" "float fov" 60
 
 Sampler "independent" "integer pixelsamples" 1
-Integrator "volpath"
+Integrator "bmc"
 Film "rgb" "string filename" "simple.png"
      "integer xresolution" [1280] "integer yresolution" [720]
 
@@ -18,6 +18,6 @@ AttributeBegin
 AttributeEnd
 
 AttributeBegin
-	Material "dielectric"
+	Material "diffuse"
 	Shape "sphere" "float radius" 1
 AttributeEnd

@@ -514,6 +514,11 @@ class BMCIntegrator : public RayIntegrator {
                        ScratchBuffer &scratchBuffer,
                        VisibleSurface *visibleSurface) const;
 
+
+    SampledSpectrum LiRecursive(RayDifferential ray, SampledWavelengths &lambda, Sampler sampler,
+                       ScratchBuffer &scratchBuffer,
+                       VisibleSurface *visibleSurface) const;
+
     static std::unique_ptr<BMCIntegrator> Create(
         const ParameterDictionary &parameters, Camera camera, Sampler sampler,
         Primitive aggregate, std::vector<Light> lights, const FileLoc *loc);
