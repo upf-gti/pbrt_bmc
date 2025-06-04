@@ -40,7 +40,6 @@
 #include <pbrt/util/stats.h>
 #include <pbrt/util/string.h>
 
-#include "GPRender/src/bmc.h"
 #include "GPRender/src/cov_kernels.h"
 
 #include <algorithm>
@@ -3649,6 +3648,52 @@ std::string FunctionIntegrator::ToString() const {
         outputFilename, camera, baseSampler);
 }
 
+// Rotate a sample around Y by a random angle
+Vector3f rotate_around_y(Vector3f dir, Float alpha) {
+    Float sin_alpha = sin(alpha);
+    Float cos_alpha = cos(alpha);
+    return Vector3f(dir.x * cos_alpha + dir.z * sin_alpha, dir.y,
+                   -dir.x * sin_alpha + dir.z * cos_alpha);
+}
+
+// Rotate a sample around Z by a random angle
+Vector3f rotate_around_z(Vector3f dir, Float alpha) {
+    Float sin_alpha = sin(alpha);
+    Float cos_alpha = cos(alpha);
+    return Vector3f(dir.x * cos_alpha - dir.y * sin_alpha,
+                   dir.x * sin_alpha + dir.y * cos_alpha, dir.z);
+}
+
+// Get a random Vector3f between a specified scalar range
+Vector3f random(Float min, Float max) {
+    Float x = min + (max - min) * (rand() / (RAND_MAX + 1.0));
+    Float y = min + (max - min) * (rand() / (RAND_MAX + 1.0));
+    Float z = min + (max - min) * (rand() / (RAND_MAX + 1.0));
+    return Vector3f(x, y, z);
+};
+
+// Get a random unit vector
+Vector3f random_unit_vector() {
+    while (true) {
+        Vector3f p = random(-1.0, 1.0);
+        Float len_sq = LengthSquared(p);
+        if (EPSILON < len_sq && len_sq <= 1.0) {
+            return p / std::sqrt(len_sq);
+        }
+    }
+}
+
+// Get random vector on an hemishpere facing the Z axis
+Vector3f random_on_hemisphere() {
+    Vector3f normal = Vector3f(0.0, 0.0, 1.0);
+    Vector3f on_unit_sphere = random_unit_vector();
+    if (Dot(on_unit_sphere, normal) > 0.0) {  // In the same hemisphere as the normal
+        return on_unit_sphere;
+    } else {
+        return -on_unit_sphere;
+    }
+}
+
 BMCIntegrator::BMCIntegrator(int maxDepth, bool sampleLights, bool sampleBSDF,
                              Camera camera, Sampler sampler, Primitive aggregate,
                              std::vector<Light> lights)
@@ -3658,7 +3703,7 @@ SampledSpectrum BMCIntegrator::Li(RayDifferential ray, SampledWavelengths &lambd
                                   Sampler sampler, ScratchBuffer &scratchBuffer,
                                   VisibleSurface *visibleSurface) const {
     // Estimate radiance along ray using simple path tracing
-    SampledSpectrum L(1.f), beta(1.f);
+    SampledSpectrum L(0.f), beta(1.f);
     bool specularBounce = true;
     int depth = 0;
 
@@ -3671,8 +3716,41 @@ std::unique_ptr<BMCIntegrator> BMCIntegrator::Create(
     int maxDepth = parameters.GetOneInt("maxdepth", 5);
     bool sampleLights = parameters.GetOneBool("samplelights", true);
     bool sampleBSDF = parameters.GetOneBool("samplebsdf", true);
-    return std::make_unique<BMCIntegrator>(maxDepth, sampleLights, sampleBSDF,
-                                                  camera, sampler, aggregate, lights);
+
+    std::unique_ptr<BMCIntegrator> bmc_integrator = std::make_unique<BMCIntegrator>(
+        maxDepth, sampleLights, sampleBSDF,
+                                                 camera, sampler,
+                                    aggregate, lights);
+
+    bmc_integrator->bmc_list.resize(bmc_integrator->num_bmcs);
+
+    for (uint32_t i = 0; i < bmc_integrator->num_bmcs; ++i) {
+        pbrt_kernel::sSobolevParams sobolev_params;
+        sobolev_params.s = 1.5f;
+
+        GaussianProcess<Vector3f, SampledSpectrum> *gaussian_process = new GaussianProcess<Vector3f, SampledSpectrum>(
+                pbrt_kernel::sobolev, &sobolev_params,
+                sizeof(pbrt_kernel::sSobolevParams), 0.01);
+
+        // Set x number of samples (observation/training points), in our case directions
+        std::vector<Vector3f> sample_directions;
+        sample_directions.reserve(bmc_integrator->num_shading_samples);
+
+        // Victor's birth year plus offset :)
+        srand(1998 + i);
+
+        // Generate x random directions in sphere and store in array
+        for (uint32_t s_idx = 0; s_idx < bmc_integrator->num_shading_samples; s_idx++) {
+            sample_directions.push_back(random_on_hemisphere());
+        }
+
+        // Fill the GP instance with the array of directions (observation points)
+        gaussian_process->set_observations(sample_directions, {});
+
+        bmc_integrator->bmc_list[i] = new BMC<Vector3f, SampledSpectrum>(random_on_hemisphere, gaussian_process);
+    }
+
+    return bmc_integrator;
 }
 
 std::string BMCIntegrator::ToString() const {

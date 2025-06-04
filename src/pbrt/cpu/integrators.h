@@ -28,6 +28,8 @@
 #include <string>
 #include <vector>
 
+#include "GPRender/src/bmc.h"
+
 namespace pbrt {
 
 // Integrator Definition
@@ -521,6 +523,15 @@ class BMCIntegrator : public RayIntegrator {
   private:
     // BayisianMonteCarloIntegrator Private Members
     int maxDepth;
+
+    std::vector<BMC<Vector3f, SampledSpectrum> *> bmc_list;
+
+    uint32_t num_bmcs = 1;
+
+    // Number of cached sample directions in the hemisphere
+    // Having very low values losses light intensity because currently our prior (expected
+    // mean) is 0
+    uint32_t num_shading_samples = 10;
 };
 
 }  // namespace pbrt
