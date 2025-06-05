@@ -3711,7 +3711,7 @@ SampledSpectrum BMCIntegrator::LiRecursive(RayDifferential ray,
                                            VisibleSurface *visibleSurface) const {
 
     // Estimate radiance along ray using simple path tracing
-    SampledSpectrum L(0.f), beta(1.f);
+    SampledSpectrum L(0.f);
     int depth = 0;
 
     // Intersect _ray_ with scene
@@ -3720,7 +3720,7 @@ SampledSpectrum BMCIntegrator::LiRecursive(RayDifferential ray,
     // Account for infinite lights (i.e. environment) if ray has no intersection
     if (!si) {
         for (const auto &light : infiniteLights)
-            L += beta * light.Le(ray, lambda);
+            L += light.Le(ray, lambda);
         return L;
     }
 
@@ -3758,7 +3758,7 @@ SampledSpectrum BMCIntegrator::LiRecursive(RayDifferential ray,
         Vector3f woLocal = rotate_around_z(wo, alpha);
         // Rotate to align hemisphere directions to intersection normal
 
-        Vector3 woWorld = Normalize(bsdf.LocalToRender(wo));
+        Vector3 woWorld = Normalize(bsdf.LocalToRender(woLocal));
 
         // Evaluate BSDF at surface for sampled direction
         SampledSpectrum bsdfVal = bsdf.f(woWorld, wiWorld);  // reflectance * cosine term
@@ -3783,9 +3783,7 @@ std::unique_ptr<BMCIntegrator> BMCIntegrator::Create(
     bool sampleBSDF = parameters.GetOneBool("samplebsdf", true);
 
     std::unique_ptr<BMCIntegrator> bmc_integrator = std::make_unique<BMCIntegrator>(
-        maxDepth, sampleLights, sampleBSDF,
-                                                 camera, sampler,
-                                    aggregate, lights);
+        maxDepth, sampleLights, sampleBSDF, camera, sampler, aggregate, lights);
 
     bmc_integrator->bmc_list.resize(bmc_integrator->num_bmcs);
 
