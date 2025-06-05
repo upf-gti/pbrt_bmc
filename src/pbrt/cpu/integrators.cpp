@@ -3761,7 +3761,7 @@ SampledSpectrum BMCIntegrator::LiRecursive(RayDifferential ray,
         Vector3 woWorld = Normalize(bsdf.LocalToRender(woLocal));
 
         // Evaluate BSDF at surface for sampled direction
-        SampledSpectrum bsdfVal = bsdf.f(woWorld, wiWorld);  // reflectance * cosine term
+        SampledSpectrum bsdfVal = bsdf.f(woWorld, wiWorld); // reflectance * cosine term
 
         // Recursively trace ray to estimate incident radiance at surface
         RayDifferential nextRay = isect.SpawnRay(woWorld);
@@ -3771,7 +3771,7 @@ SampledSpectrum BMCIntegrator::LiRecursive(RayDifferential ray,
     }
 
     L += bmc->compute_integral(radianceSamples);
-
+    
     return L;
 }
 

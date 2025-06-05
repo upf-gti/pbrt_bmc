@@ -1,23 +1,30 @@
-LookAt 0.0 0.0 -3.0 # eye
-       0.0 0.0 0.0 	# look at point
-       0 1 0    # up vector
-Camera "perspective" "float fov" 60
+# seed [1998]
 
-Sampler "independent" "integer pixelsamples" 1
-Integrator "bmc"
-Film "rgb" "string filename" "simple.png"
-     "integer xresolution" [1280] "integer yresolution" [720]
+LookAt 0.0 0.0 -3.0 # eye
+	   0.0 0.0 0.0 	# look at point
+	   0.0 1.0 0.0  # up vector
+Camera "perspective" "float fov" [60]
+
+Sampler "independent" "integer pixelsamples" [1]
+
+Film "rgb" "string filename" "../scenes/simpleSphere/simpleSphere.exr"
+	 "bool savefp16" true "integer pixelbounds" [0 1280 0 720]
+	 "integer xresolution" [1280] "integer yresolution" [720]
+
+PixelFilter "box"
+
+Integrator "bmc" "integer maxdepth" [2]
 
 WorldBegin
 
 AttributeBegin
-    Rotate 90 0 1 0
-    Rotate -90 1 0 0
-    LightSource "infinite"
-        "string filename" "hdrs/sky.exr"
+	Rotate 90 0 1 0
+	Rotate -90 1 0 0
+	LightSource "infinite"
+		"string filename" "hdrs/sky.exr"
 AttributeEnd
 
 AttributeBegin
 	Material "diffuse"
-	Shape "sphere" "float radius" 1
+	Shape "sphere" "float radius" [1]
 AttributeEnd
