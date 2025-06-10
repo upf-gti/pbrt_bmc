@@ -3702,17 +3702,18 @@ BMCIntegrator::BMCIntegrator(int maxDepth, bool sampleLights, bool sampleBSDF,
 SampledSpectrum BMCIntegrator::Li(RayDifferential ray, SampledWavelengths &lambda,
                                   Sampler sampler, ScratchBuffer &scratchBuffer,
                                   VisibleSurface *visibleSurface) const {
-    return LiRecursive(ray, lambda, sampler, scratchBuffer, visibleSurface);
+    return LiRecursive(ray, lambda, sampler, scratchBuffer, visibleSurface, 0);
 }
 
+// quick access: --nthreads=1 --interactive
 SampledSpectrum BMCIntegrator::LiRecursive(RayDifferential ray,
                                            SampledWavelengths &lambda, Sampler sampler,
                                            ScratchBuffer &scratchBuffer,
-                                           VisibleSurface *visibleSurface) const {
+                                           VisibleSurface *visibleSurface, int depth) const {
 
     // Estimate radiance along ray using simple path tracing
     SampledSpectrum L(0.f);
-    int depth = 0;
+    int currDepth = depth;
 
     // Intersect _ray_ with scene
     pstd::optional<ShapeIntersection> si = Intersect(ray);
@@ -3725,7 +3726,7 @@ SampledSpectrum BMCIntegrator::LiRecursive(RayDifferential ray,
     }
 
     // End path if maximum depth reached
-    if (depth++ == maxDepth)
+    if (currDepth++ == maxDepth)
         return L;
 
     // Pick a random BMC Gaussian Process
@@ -3753,11 +3754,9 @@ SampledSpectrum BMCIntegrator::LiRecursive(RayDifferential ray,
     // Loop for each random directions computed in the preprocess step
     for (uint32_t sIdx = 0; sIdx < num_shading_samples; sIdx++) {
         Vector3f wo = bmc->get_gaussian_process()->get_observation(sIdx);
-        // Rotate to get different directions each sample/pixel/intersection (with
-        // same covariance matrix)
+        // Rotate to get different directions each sample/intersection (with same cov mat)
         Vector3f woLocal = rotate_around_z(wo, alpha);
         // Rotate to align hemisphere directions to intersection normal
-
         Vector3 woWorld = Normalize(bsdf.LocalToRender(woLocal));
 
         // Evaluate BSDF at surface for sampled direction
@@ -3767,7 +3766,8 @@ SampledSpectrum BMCIntegrator::LiRecursive(RayDifferential ray,
         RayDifferential nextRay = isect.SpawnRay(woWorld);
 
         // Store each color retrieved from every direction in an array
-        radianceSamples.push_back(LiRecursive(nextRay, lambda, sampler, scratchBuffer, visibleSurface) * bsdfVal);
+        radianceSamples.push_back(LiRecursive(nextRay, lambda, sampler, 
+            scratchBuffer, visibleSurface, currDepth) * bsdfVal);
     }
 
     L += bmc->compute_integral(radianceSamples);
