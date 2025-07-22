@@ -503,7 +503,7 @@ class FunctionIntegrator : public Integrator {
     std::string imageFilename;
 };
 
-// BayisianMonteCarloIntegrator Definition
+// BayesianMonteCarloIntegrator Definition
 class BMCIntegrator : public RayIntegrator {
   public:
     // BayisianMonteCarloIntegrator Public Methods
@@ -531,12 +531,98 @@ class BMCIntegrator : public RayIntegrator {
 
     std::vector<BMC<Vector3f, SampledSpectrum> *> bmc_list;
 
+    uint32_t num_bmcs = 10;
+
+    // Number of cached sample directions in the hemisphere
+    // Having very low values losses light intensity because currently our prior (expected
+    // mean) is 0
+    uint32_t num_shading_samples = 50;
+};
+
+class DepthIntegrator : public RayIntegrator {
+  public:
+    // BayisianMonteCarloIntegrator Public Methods
+    DepthIntegrator(bool sampleLights, bool sampleBSDF, Camera camera, Sampler sampler,
+                     Primitive aggregate, std::vector<Light> lights);
+
+    SampledSpectrum Li(RayDifferential ray, SampledWavelengths &lambda, Sampler sampler,
+                       ScratchBuffer &scratchBuffer,
+                       VisibleSurface *visibleSurface) const;
+
+    static std::unique_ptr<DepthIntegrator> Create(const ParameterDictionary &parameters,
+                                                 Camera camera, Sampler sampler,
+                                                 Primitive aggregate,
+                                                 std::vector<Light> lights,
+                                                 const FileLoc *loc);
+
+    std::string ToString() const;
+
+    
+  private:
+    // Number of cached sample directions in the hemisphere
+    // Having very low values losses light intensity because currently our prior (expected
+    // mean) is 0
+    uint32_t num_shading_samples = 1;
+    mutable float maxDepth;
+    
+};
+
+class DirectIntegrator : public RayIntegrator {
+  public:
+    // BayisianMonteCarloIntegrator Public Methods
+    DirectIntegrator(bool sampleLights, bool sampleBSDF, Camera camera,
+                  Sampler sampler, Primitive aggregate, std::vector<Light> lights);
+
+    SampledSpectrum Li(RayDifferential ray, SampledWavelengths &lambda, Sampler sampler,
+                       ScratchBuffer &scratchBuffer,
+                       VisibleSurface *visibleSurface) const;
+
+    static std::unique_ptr<DirectIntegrator> Create(const ParameterDictionary &parameters,
+                                                 Camera camera, Sampler sampler,
+                                                 Primitive aggregate,
+                                                 std::vector<Light> lights,
+                                                 const FileLoc *loc);
+
+    std::string ToString() const;
+
+  private:
+
+    // Number of cached sample directions in the hemisphere
+    // Having very low values losses light intensity because currently our prior (expected
+    // mean) is 0
+    uint32_t num_shading_samples = 50;
+};
+
+// BayisianMonteCarloIntegrator Definition
+class DirectBMCIntegrator : public RayIntegrator {
+  public:
+    // BayisianMonteCarloIntegrator Public Methods
+    DirectBMCIntegrator(bool sampleLights, bool sampleBSDF, Camera camera,
+                  Sampler sampler, Primitive aggregate, std::vector<Light> lights);
+
+    SampledSpectrum Li(RayDifferential ray, SampledWavelengths &lambda, Sampler sampler,
+                       ScratchBuffer &scratchBuffer,
+                       VisibleSurface *visibleSurface) const;
+
+    static std::unique_ptr<DirectBMCIntegrator> Create(const ParameterDictionary &parameters,
+                                                 Camera camera, Sampler sampler,
+                                                 Primitive aggregate,
+                                                 std::vector<Light> lights,
+                                                 const FileLoc *loc);
+
+    std::string ToString() const;
+
+  private:
+    // BayisianMonteCarloIntegrator Private Members
+
+    std::vector<BMC<Vector3f, SampledSpectrum> *> bmc_list;
+
     uint32_t num_bmcs = 1;
 
     // Number of cached sample directions in the hemisphere
     // Having very low values losses light intensity because currently our prior (expected
     // mean) is 0
-    uint32_t num_shading_samples = 10;
+    uint32_t num_shading_samples = 128;
 };
 
 }  // namespace pbrt

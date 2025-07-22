@@ -3820,6 +3820,198 @@ std::string BMCIntegrator::ToString() const {
     return StringPrintf("[ BayisianMonteCarloIntegrator maxDepth: %d]", maxDepth);
 }
 
+// Depth first integrator
+
+DepthIntegrator::DepthIntegrator(bool sampleLights, bool sampleBSDF,
+                                         Camera camera, Sampler sampler,
+                                         Primitive aggregate, std::vector<Light> lights)
+    : RayIntegrator(camera, sampler, aggregate, lights) {
+    maxDepth = 900.048767f;
+}
+
+SampledSpectrum DepthIntegrator::Li(RayDifferential ray, SampledWavelengths &lambda,
+                                    Sampler sampler, ScratchBuffer &scratchBuffer,
+                                    VisibleSurface *visibleSurface) const {
+
+    pstd::optional<ShapeIntersection> si = Intersect(ray);
+    if (!si) return SampledSpectrum(0.f);
+
+    float t = si->tHit;
+
+    //printf("%f \n", t);
+    SampledSpectrum X = Spectra::Y().Sample(lambda);
+    //return SampledSpectrum(0.5f);
+    return SampledSpectrum(1.0f - (t / 900)) * X;
+
+
+    //return SampledSpectrum(1.0f - (distance / 7.5f));
+    //return SampledSpectrum(1.0f - (distance / 7.926478));
+
+}
+
+std::string DepthIntegrator::ToString() const {
+    return StringPrintf("[ BayisianMonteCarloIntegrator maxDepth: %d]");
+}
+
+std::unique_ptr<DepthIntegrator> DepthIntegrator::Create(
+    const ParameterDictionary &parameters, Camera camera, Sampler sampler,
+    Primitive aggregate, std::vector<Light> lights, const FileLoc *loc) {
+    bool sampleLights = parameters.GetOneBool("samplelights", true);
+    bool sampleBSDF = parameters.GetOneBool("samplebsdf", true);
+
+    return std::make_unique<DepthIntegrator>(sampleLights, sampleBSDF, camera, sampler,
+                                              aggregate, lights);
+
+}
+
+// Direct Integrator Classic Monte Carlo
+
+DirectIntegrator::DirectIntegrator(bool sampleLights, bool sampleBSDF,
+                                         Camera camera, Sampler sampler,
+                                         Primitive aggregate, std::vector<Light> lights)
+    : RayIntegrator(camera, sampler, aggregate, lights) {}
+
+SampledSpectrum DirectIntegrator::Li(RayDifferential ray, SampledWavelengths &lambda,
+                                    Sampler sampler, ScratchBuffer &scratchBuffer,
+                                    VisibleSurface *visibleSurface) const {
+    pstd::optional<ShapeIntersection> si = Intersect(ray);
+
+    if (si) {
+        float distance = si->tHit;
+        return SampledSpectrum(1.0f);
+    }
+
+    return SampledSpectrum(1.0f);
+}
+
+std::string DirectIntegrator::ToString() const {
+    return StringPrintf("[ BayisianMonteCarloIntegrator maxDepth: %d]");
+}
+
+std::unique_ptr<DirectIntegrator> DirectIntegrator::Create(
+    const ParameterDictionary &parameters, Camera camera, Sampler sampler,
+    Primitive aggregate, std::vector<Light> lights, const FileLoc *loc) {
+    bool sampleLights = parameters.GetOneBool("samplelights", true);
+    bool sampleBSDF = parameters.GetOneBool("samplebsdf", true);
+
+    return std::make_unique<DirectIntegrator>(sampleLights, sampleBSDF, camera, sampler,
+                                             aggregate, lights);
+}
+
+// Direct BMC Integrator
+
+DirectBMCIntegrator::DirectBMCIntegrator(bool sampleLights, bool sampleBSDF,
+                             Camera camera, Sampler sampler, Primitive aggregate,
+                             std::vector<Light> lights)
+    : RayIntegrator(camera, sampler, aggregate, lights) {}
+
+
+SampledSpectrum DirectBMCIntegrator::Li(RayDifferential ray, SampledWavelengths &lambda,
+                                  Sampler sampler, ScratchBuffer &scratchBuffer,
+                                  VisibleSurface *visibleSurface) const {
+    
+    
+    SampledSpectrum L(0.f);
+    // Intersect _ray_ with scene
+    pstd::optional<ShapeIntersection> si = Intersect(ray);
+    
+    // Account for infinite lights (i.e. environment) if ray has no intersection
+    //if (!si) {
+    //    for (const auto &light : infiniteLights)
+    //        L += light.Le(ray, lambda);
+    //    return L;
+    //}
+
+    // Pick a random BMC Gaussian Process
+    uint32_t randomGP = rand() % num_bmcs;
+    BMC<Vector3f, SampledSpectrum> *bmc = bmc_list[randomGP];
+
+    // Store the radiance of each random direction
+    std::vector<SampledSpectrum> radianceSamples;
+
+    // Random angle to rotate the GP directions
+    Float alpha = 2.0 * PI * rand() / (Float)RAND_MAX;
+    
+    SurfaceInteraction &isect = si->intr;
+
+    // Get BSDF and skip over medium boundaries
+    BSDF bsdf = isect.GetBSDF(ray, lambda, camera, scratchBuffer, sampler);
+
+    Vector3f woWorld = -ray.d;
+
+        // Loop for each random directions computed in the preprocess step
+    for (uint32_t sIdx = 0; sIdx < num_shading_samples; sIdx++)
+    {
+        Vector3f wi = bmc->get_gaussian_process()->get_observation(sIdx);
+        // Rotate to get different directions each sample/intersection (with same cov mat)
+        Vector3f wiLocal = rotate_around_z(wi, alpha);
+        // Rotate to align hemisphere directions to intersection normal
+        Vector3 wiWorld = Normalize(bsdf.LocalToRender(wiLocal));
+
+        // Evaluate BSDF at surface for sampled direction
+        SampledSpectrum bsdfVal = bsdf.f(woWorld, wiWorld);  // reflectance * cosine term
+
+        // Recursively trace ray to estimate incident radiance at surface
+        RayDifferential nextRay = isect.SpawnRay(wiWorld);
+
+        // Store each color retrieved from every direction in an array
+        radianceSamples.push_back(this->lights.front().Le(nextRay, lambda) * bsdfVal);
+    }
+
+    L += bmc->compute_integral(radianceSamples);
+
+    return L;
+}
+
+std::string DirectBMCIntegrator::ToString() const {
+    return StringPrintf("[ BayisianMonteCarloIntegrator maxDepth: %d]");
+}
+
+std::unique_ptr<DirectBMCIntegrator> DirectBMCIntegrator::Create(
+    const ParameterDictionary &parameters, Camera camera, Sampler sampler,
+    Primitive aggregate, std::vector<Light> lights, const FileLoc *loc) {
+    bool sampleLights = parameters.GetOneBool("samplelights", true);
+    bool sampleBSDF = parameters.GetOneBool("samplebsdf", true);
+
+    std::unique_ptr<DirectBMCIntegrator> bmc_integrator =
+        std::make_unique<DirectBMCIntegrator>(sampleLights, sampleBSDF, camera, sampler, aggregate, lights);
+
+    bmc_integrator->bmc_list.resize(bmc_integrator->num_bmcs);
+
+    for (uint32_t i = 0; i < bmc_integrator->num_bmcs; ++i) {
+        pbrt_kernel::sSobolevParams sobolev_params;
+        sobolev_params.s = 1.5f;
+
+        GaussianProcess<Vector3f, SampledSpectrum> *gaussian_process =
+            new GaussianProcess<Vector3f, SampledSpectrum>(
+                pbrt_kernel::sobolev, &sobolev_params,
+                sizeof(pbrt_kernel::sSobolevParams), 0.01);
+
+        // Set x number of samples (observation/training points), in our case directions
+        std::vector<Vector3f> sample_directions;
+        sample_directions.reserve(bmc_integrator->num_shading_samples);
+
+        // Victor's birth year plus offset :)
+        srand(1998 + i);
+
+        // Generate x random directions in sphere and store in array
+        for (uint32_t s_idx = 0; s_idx < bmc_integrator->num_shading_samples; s_idx++) {
+            sample_directions.push_back(random_on_hemisphere());
+        }
+
+        // Fill the GP instance with the array of directions (observation points)
+        gaussian_process->set_observations(sample_directions, {});
+
+        bmc_integrator->bmc_list[i] =
+            new BMC<Vector3f, SampledSpectrum>(random_on_hemisphere, gaussian_process);
+    }
+
+
+    return bmc_integrator;
+}
+
+//-------------------------------------------------------------------
+
 std::unique_ptr<Integrator> Integrator::Create(
     const std::string &name, const ParameterDictionary &parameters, Camera camera,
     Sampler sampler, Primitive aggregate, std::vector<Light> lights,
@@ -3859,6 +4051,14 @@ std::unique_ptr<Integrator> Integrator::Create(
     else if (name == "bmc")
         integrator = BMCIntegrator::Create(parameters, camera, sampler, aggregate,
                                                   lights, loc);
+    else if (name == "depth")
+        integrator = DepthIntegrator::Create(parameters, camera, sampler, aggregate,
+                                                 lights, loc);
+    else if (name == "direct")
+        integrator = DirectIntegrator::Create(parameters, camera, sampler, aggregate,
+                                                 lights, loc);
+    else if (name == "directbmc")
+        integrator = DirectBMCIntegrator::Create(parameters, camera, sampler, aggregate, lights, loc);
     else
         ErrorExit(loc, "%s: integrator type unknown.", name);
 
