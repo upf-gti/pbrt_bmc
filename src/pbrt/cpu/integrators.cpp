@@ -3770,7 +3770,7 @@ SampledSpectrum BMCIntegrator::LiRecursive(RayDifferential ray,
             scratchBuffer, visibleSurface, currDepth) * bsdfVal);
     }
 
-    L += bmc->compute_integral(radianceSamples);
+    bmc->compute_integral(radianceSamples, L);
     
     return L;
 }
@@ -3826,7 +3826,7 @@ DepthIntegrator::DepthIntegrator(bool sampleLights, bool sampleBSDF,
                                          Camera camera, Sampler sampler,
                                          Primitive aggregate, std::vector<Light> lights)
     : RayIntegrator(camera, sampler, aggregate, lights) {
-    maxDepth = 900.048767f;
+    maxDepth = 0.f;
 }
 
 SampledSpectrum DepthIntegrator::Li(RayDifferential ray, SampledWavelengths &lambda,
@@ -3837,15 +3837,12 @@ SampledSpectrum DepthIntegrator::Li(RayDifferential ray, SampledWavelengths &lam
     if (!si) return SampledSpectrum(0.f);
 
     float t = si->tHit;
-
-    //printf("%f \n", t);
-    SampledSpectrum X = Spectra::Y().Sample(lambda);
-    //return SampledSpectrum(0.5f);
-    return SampledSpectrum(1.0f - (t / 900)) * X;
-
-
-    //return SampledSpectrum(1.0f - (distance / 7.5f));
-    //return SampledSpectrum(1.0f - (distance / 7.926478));
+    if (t > maxDepth) {
+        maxDepth = t;
+        printf("%f", t);
+    }
+        
+    return SampledSpectrum(1.0f - (t / 46));
 
 }
 
@@ -3872,16 +3869,43 @@ DirectIntegrator::DirectIntegrator(bool sampleLights, bool sampleBSDF,
     : RayIntegrator(camera, sampler, aggregate, lights) {}
 
 SampledSpectrum DirectIntegrator::Li(RayDifferential ray, SampledWavelengths &lambda,
-                                    Sampler sampler, ScratchBuffer &scratchBuffer,
-                                    VisibleSurface *visibleSurface) const {
-    pstd::optional<ShapeIntersection> si = Intersect(ray);
+                                     Sampler sampler, ScratchBuffer &scratchBuffer,
+                                     VisibleSurface *visibleSurface) const {
+    pstd::optional<ShapeIntersection> si, random_si;
+    si = Intersect(ray);
 
-    if (si) {
-        float distance = si->tHit;
-        return SampledSpectrum(1.0f);
+    if (!si) return SampledSpectrum(0.0f);
+    SurfaceInteraction &isect = si->intr;
+    BSDF bsdf = isect.GetBSDF(ray, lambda, camera, scratchBuffer, sampler);
+
+    // Store the radiance of each random direction
+    SampledSpectrum L(0.0f), bsdfVal(0.0f);
+    
+    Vector3f woWorld, wiLocal, wiWorld;
+    woWorld = -ray.d;
+
+    // Random angle to rotate the GP directions
+    Float alpha = 2.0 * PI * rand() / (Float)RAND_MAX;
+
+    for (uint32_t i = 0; i < num_shading_samples; i++) {
+        wiLocal = observation_positions[i];
+        wiLocal = rotate_around_z(wiLocal, alpha);
+        wiWorld = Normalize(bsdf.LocalToRender(wiLocal));
+
+        RayDifferential nextRay = isect.SpawnRay(wiWorld);
+        random_si = Intersect(nextRay);
+        if (!random_si)
+            continue;
+        
+        // Evaluate BSDF at surface for sampled direction
+        bsdfVal = bsdf.f(woWorld, wiWorld) * Dot(wiWorld, isect.shading.n);
+        L += random_si->intr.Le(-nextRay.d, lambda) * bsdfVal;
     }
+    
+    L /= (num_shading_samples * UniformHemispherePDF());
 
-    return SampledSpectrum(1.0f);
+    L += si->intr.Le(-ray.d, lambda); //emitted light from x
+    return L;
 }
 
 std::string DirectIntegrator::ToString() const {
@@ -3894,8 +3918,22 @@ std::unique_ptr<DirectIntegrator> DirectIntegrator::Create(
     bool sampleLights = parameters.GetOneBool("samplelights", true);
     bool sampleBSDF = parameters.GetOneBool("samplebsdf", true);
 
-    return std::make_unique<DirectIntegrator>(sampleLights, sampleBSDF, camera, sampler,
+    std::unique_ptr<DirectIntegrator> direct_integrator = std::make_unique<DirectIntegrator>(
+        sampleLights, sampleBSDF, camera, sampler,
                                              aggregate, lights);
+
+    std::vector<Vector3f> sample_directions;
+    sample_directions.reserve(direct_integrator->num_shading_samples);
+
+    srand(1998);
+
+    // Generate x random directions in sphere and store in array
+    for (uint32_t s_idx = 0; s_idx < direct_integrator->num_shading_samples; s_idx++) {
+        sample_directions.push_back(random_on_hemisphere());
+    }
+    direct_integrator->set_observations(sample_directions);
+
+    return direct_integrator;
 }
 
 // Direct BMC Integrator
@@ -3912,54 +3950,41 @@ SampledSpectrum DirectBMCIntegrator::Li(RayDifferential ray, SampledWavelengths 
     
     
     SampledSpectrum L(0.f);
-    // Intersect _ray_ with scene
-    pstd::optional<ShapeIntersection> si = Intersect(ray);
-    
-    // Account for infinite lights (i.e. environment) if ray has no intersection
-    //if (!si) {
-    //    for (const auto &light : infiniteLights)
-    //        L += light.Le(ray, lambda);
-    //    return L;
-    //}
+    pstd::optional<ShapeIntersection> si, random_si;
+    si = Intersect(ray);  
 
-    // Pick a random BMC Gaussian Process
     uint32_t randomGP = rand() % num_bmcs;
     BMC<Vector3f, SampledSpectrum> *bmc = bmc_list[randomGP];
 
-    // Store the radiance of each random direction
     std::vector<SampledSpectrum> radianceSamples;
 
-    // Random angle to rotate the GP directions
     Float alpha = 2.0 * PI * rand() / (Float)RAND_MAX;
     
     SurfaceInteraction &isect = si->intr;
 
-    // Get BSDF and skip over medium boundaries
     BSDF bsdf = isect.GetBSDF(ray, lambda, camera, scratchBuffer, sampler);
 
-    Vector3f woWorld = -ray.d;
+    Vector3f woWorld, wiLocal, wiWorld;
+    woWorld = -ray.d;
 
-        // Loop for each random directions computed in the preprocess step
     for (uint32_t sIdx = 0; sIdx < num_shading_samples; sIdx++)
     {
-        Vector3f wi = bmc->get_gaussian_process()->get_observation(sIdx);
-        // Rotate to get different directions each sample/intersection (with same cov mat)
-        Vector3f wiLocal = rotate_around_z(wi, alpha);
-        // Rotate to align hemisphere directions to intersection normal
-        Vector3 wiWorld = Normalize(bsdf.LocalToRender(wiLocal));
+        wiLocal = bmc->get_gaussian_process()->get_observation(sIdx);
+        wiLocal = rotate_around_z(wiLocal, alpha);
+        wiWorld = Normalize(bsdf.LocalToRender(wiLocal));
 
-        // Evaluate BSDF at surface for sampled direction
-        SampledSpectrum bsdfVal = bsdf.f(woWorld, wiWorld);  // reflectance * cosine term
+        SampledSpectrum bsdfVal = bsdf.f(woWorld, wiWorld);
 
-        // Recursively trace ray to estimate incident radiance at surface
         RayDifferential nextRay = isect.SpawnRay(wiWorld);
+        random_si = Intersect(nextRay);
+        if (!random_si)
+            continue;
 
-        // Store each color retrieved from every direction in an array
-        radianceSamples.push_back(this->lights.front().Le(nextRay, lambda) * bsdfVal);
+        radianceSamples.push_back(random_si->intr.Le(-nextRay.d, lambda) * bsdfVal);
     }
+    bmc->compute_integral(radianceSamples, L);
 
-    L += bmc->compute_integral(radianceSamples);
-
+    L += si->intr.Le(-ray.d, lambda);  // emitted light from x
     return L;
 }
 
@@ -4002,8 +4027,7 @@ std::unique_ptr<DirectBMCIntegrator> DirectBMCIntegrator::Create(
         // Fill the GP instance with the array of directions (observation points)
         gaussian_process->set_observations(sample_directions, {});
 
-        bmc_integrator->bmc_list[i] =
-            new BMC<Vector3f, SampledSpectrum>(random_on_hemisphere, gaussian_process);
+        bmc_integrator->bmc_list[i] = new BMC<Vector3f, SampledSpectrum>(random_on_hemisphere, gaussian_process);
     }
 
 

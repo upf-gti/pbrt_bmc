@@ -14,7 +14,7 @@ Film "rgb" "string filename" "../scenes/simpleSphere/simpleSphere.exr"
 PixelFilter "box"
 
 # Integrator "bmc" "integer maxdepth" [5]
-Integrator "directbmc"
+Integrator "direct"
 
 WorldBegin
 

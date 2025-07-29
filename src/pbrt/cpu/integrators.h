@@ -531,7 +531,7 @@ class BMCIntegrator : public RayIntegrator {
 
     std::vector<BMC<Vector3f, SampledSpectrum> *> bmc_list;
 
-    uint32_t num_bmcs = 10;
+    uint32_t num_bmcs = 1;
 
     // Number of cached sample directions in the hemisphere
     // Having very low values losses light intensity because currently our prior (expected
@@ -590,7 +590,12 @@ class DirectIntegrator : public RayIntegrator {
     // Number of cached sample directions in the hemisphere
     // Having very low values losses light intensity because currently our prior (expected
     // mean) is 0
-    uint32_t num_shading_samples = 50;
+    uint32_t num_shading_samples = 128;
+    std::vector<Vector3f> observation_positions;
+
+    void set_observations(std::vector<Vector3f> positions) {
+        this->observation_positions = positions;
+    }
 };
 
 // BayisianMonteCarloIntegrator Definition
@@ -617,12 +622,12 @@ class DirectBMCIntegrator : public RayIntegrator {
 
     std::vector<BMC<Vector3f, SampledSpectrum> *> bmc_list;
 
-    uint32_t num_bmcs = 1;
+    uint32_t num_bmcs = 15;
 
     // Number of cached sample directions in the hemisphere
     // Having very low values losses light intensity because currently our prior (expected
     // mean) is 0
-    uint32_t num_shading_samples = 128;
+    uint32_t num_shading_samples = 1024;
 };
 
 }  // namespace pbrt
