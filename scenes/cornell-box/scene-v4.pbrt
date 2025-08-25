@@ -1,3 +1,4 @@
+Integrator "areabmc" # "integer maxdepth" [1]
 
 Transform [ 1 -0 -0 -0 -0 1 -0 -0 -0 -0 -1 -0 -0 -1 6.8 1  ]
 Sampler "sobol"
@@ -7,12 +8,11 @@ PixelFilter "triangle"
     "float yradius" [ 1 ]
 Film "rgb"
     "string filename" [ "../scenes/cornell-box/TungstenRender.exr" ]
-    "integer yresolution" [ 1024 ]
-    "integer xresolution" [ 1024 ]
+    # "integer pixelbounds" [400 500 400 500]
+    "integer yresolution" [ 100 ]
+    "integer xresolution" [ 100 ]
 Camera "perspective"
     "float fov" [ 19.5 ]
-
-Integrator "directbmc"
 
 WorldBegin
 

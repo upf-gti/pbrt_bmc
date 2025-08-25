@@ -4,13 +4,12 @@ LookAt 200 250 70
 Camera "perspective"
     "float fov" [ 38 ]
 Film "rgb"
-    "string filename" [ "../scenes/killeroos/killeroo-gold.exr" ]
+    "string filename" [ "killeroo-gold.exr" ]
     "integer yresolution" [ 1026 ]
     "integer xresolution" [ 1368 ]
 Sampler "halton"
-    "integer pixelsamples" [ 1 ]
+    "integer pixelsamples" [ 512 ]
 
-Integrator "depth"
 
 WorldBegin
 
