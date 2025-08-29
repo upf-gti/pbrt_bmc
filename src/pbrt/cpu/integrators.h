@@ -692,6 +692,38 @@ class AreaIntegratorBMC : public RayIntegrator {
     BMC_area<Vector3f, SampledSpectrum> *bmc;
 };
 
+// AreaIntegrator CMC Definition
+class AreaIntegratorBMC2 : public RayIntegrator {
+  public:
+    // BayisianMonteCarloIntegrator Public Methods
+    AreaIntegratorBMC2(bool sampleLights, bool sampleBSDF, Camera camera, Sampler sampler,
+                      Primitive aggregate, std::vector<Light> lights);
+
+    SampledSpectrum Li(RayDifferential ray, SampledWavelengths &lambda, Sampler sampler,
+                       ScratchBuffer &scratchBuffer,
+                       VisibleSurface *visibleSurface) const;
+
+    Vector3f random_on_area(Sampler sampler, Vector3f diagonal);
+
+    static std::unique_ptr<AreaIntegratorBMC2> Create(
+        const ParameterDictionary &parameters, Camera camera, Sampler sampler,
+        Primitive aggregate, std::vector<Light> lights, const FileLoc *loc);
+
+    std::string ToString() const;
+
+  private:
+    // Number of cached sample directions in the hemisphere
+    // Having very low values losses light intensity because currently our prior (expected
+    // mean) is 0
+    uint32_t num_shading_samples = 32;
+    bool sampleLights, sampleBSDF;
+    UniformLightSampler lightSampler;
+
+    std::vector<BMC_area<Vector3f, SampledSpectrum> *> bmc_list;
+
+    uint32_t num_bmcs = 10;
+};
+
 
 }  // namespace pbrt
 

@@ -9,8 +9,8 @@ PixelFilter "triangle"
 Film "rgb"
     "string filename" [ "../scenes/cornell-box/TungstenRender.exr" ]
     # "integer pixelbounds" [400 500 400 500]
-    "integer yresolution" [ 100 ]
-    "integer xresolution" [ 100 ]
+    "integer yresolution" [ 1024 ]
+    "integer xresolution" [ 1024 ]
 Camera "perspective"
     "float fov" [ 19.5 ]
 
