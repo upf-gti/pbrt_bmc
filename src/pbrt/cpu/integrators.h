@@ -653,7 +653,7 @@ class AreaIntegrator : public RayIntegrator {
     // Number of cached sample directions in the hemisphere
     // Having very low values losses light intensity because currently our prior (expected
     // mean) is 0
-    uint32_t num_shading_samples = 32;
+    uint32_t num_shading_samples = 256;
     bool sampleLights, sampleBSDF;
     UniformLightSampler lightSampler;
 
@@ -703,19 +703,19 @@ class AreaIntegratorBMC2 : public RayIntegrator {
                        ScratchBuffer &scratchBuffer,
                        VisibleSurface *visibleSurface) const;
 
-    Vector3f random_on_area(Sampler sampler, Vector3f diagonal);
+    Vector3f random_on_area(Vector3f diagonal);
 
     static std::unique_ptr<AreaIntegratorBMC2> Create(
         const ParameterDictionary &parameters, Camera camera, Sampler sampler,
         Primitive aggregate, std::vector<Light> lights, const FileLoc *loc);
 
     std::string ToString() const;
-
   private:
     // Number of cached sample directions in the hemisphere
     // Having very low values losses light intensity because currently our prior (expected
     // mean) is 0
-    uint32_t num_shading_samples = 32;
+    uint32_t num_shading_samples = 4;
+    uint32_t count = 0;
     bool sampleLights, sampleBSDF;
     UniformLightSampler lightSampler;
 

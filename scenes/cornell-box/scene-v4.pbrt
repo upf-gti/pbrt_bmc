@@ -1,14 +1,14 @@
-Integrator "areabmc" # "integer maxdepth" [1]
+Integrator "areabmc2" # "integer maxdepth" [1]
 
 Transform [ 1 -0 -0 -0 -0 1 -0 -0 -0 -0 -1 -0 -0 -1 6.8 1  ]
-Sampler "sobol"
+Sampler "independent"
     "integer pixelsamples" [ 1 ]
 PixelFilter "triangle"
     "float xradius" [ 1 ]
     "float yradius" [ 1 ]
 Film "rgb"
     "string filename" [ "../scenes/cornell-box/TungstenRender.exr" ]
-    # "integer pixelbounds" [400 500 400 500]
+    #"integer pixelbounds" [600 601 600 602]
     "integer yresolution" [ 1024 ]
     "integer xresolution" [ 1024 ]
 Camera "perspective"

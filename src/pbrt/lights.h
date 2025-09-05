@@ -181,7 +181,7 @@ class LightBase {
     // LightBase Protected Members
     LightType type;
     Transform renderFromLight;
-         mediumInterface;
+    MediumInterface mediumInterface;
     static InternCache<DenselySampledSpectrum> *spectrumCache;
 };
 
