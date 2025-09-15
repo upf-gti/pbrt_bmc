@@ -395,7 +395,9 @@ SampledSpectrum SimplePathIntegrator::Li(RayDifferential ray, SampledWavelengths
     SampledSpectrum L(0.f), beta(1.f);
     bool specularBounce = true;
     int depth = 0;
-    while (beta) {
+    while (beta) {  
+
+
         // Find next _SimplePathIntegrator_ vertex and accumulate contribution
         // Intersect _ray_ with scene
         pstd::optional<ShapeIntersection> si = Intersect(ray);
@@ -446,7 +448,7 @@ SampledSpectrum SimplePathIntegrator::Li(RayDifferential ray, SampledWavelengths
         }
 
         // Sample outgoing direction at intersection to continue path
-        if (sampleBSDF) {
+         if (sampleBSDF) {
             // Sample BSDF for new path direction
             Float u = sampler.Get1D();
             pstd::optional<BSDFSample> bs = bsdf.Sample_f(wo, u, sampler.Get2D());
@@ -492,7 +494,7 @@ std::string SimplePathIntegrator::ToString() const {
 std::unique_ptr<SimplePathIntegrator> SimplePathIntegrator::Create(
     const ParameterDictionary &parameters, Camera camera, Sampler sampler,
     Primitive aggregate, std::vector<Light> lights, const FileLoc *loc) {
-    int maxDepth = parameters.GetOneInt("maxdepth", 5);
+    int maxDepth = parameters.GetOneInt("maxdepth", 1);
     bool sampleLights = parameters.GetOneBool("samplelights", true);
     bool sampleBSDF = parameters.GetOneBool("samplebsdf", true);
     return std::make_unique<SimplePathIntegrator>(maxDepth, sampleLights, sampleBSDF,
@@ -730,7 +732,7 @@ SampledSpectrum PathIntegrator::Li(RayDifferential ray, SampledWavelengths &lamb
                 ++zeroRadiancePaths;
             L += beta * Ld;
         }
-
+        
         // Sample BSDF to get new path direction
         Vector3f wo = -ray.d;
         Float u = sampler.Get1D();
@@ -814,7 +816,7 @@ std::string PathIntegrator::ToString() const {
 std::unique_ptr<PathIntegrator> PathIntegrator::Create(
     const ParameterDictionary &parameters, Camera camera, Sampler sampler,
     Primitive aggregate, std::vector<Light> lights, const FileLoc *loc) {
-    int maxDepth = parameters.GetOneInt("maxdepth", 5);
+    int maxDepth = parameters.GetOneInt("maxdepth", 1);
     std::string lightStrategy = parameters.GetOneString("lightsampler", "bvh");
     bool regularize = parameters.GetOneBool("regularize", false);
     return std::make_unique<PathIntegrator>(maxDepth, camera, sampler, aggregate, lights,
@@ -3820,47 +3822,6 @@ std::string BMCIntegrator::ToString() const {
     return StringPrintf("[ BayisianMonteCarloIntegrator maxDepth: %d]", maxDepth);
 }
 
-// Depth first integrator
-
-DepthIntegrator::DepthIntegrator(bool sampleLights, bool sampleBSDF,
-                                         Camera camera, Sampler sampler,
-                                         Primitive aggregate, std::vector<Light> lights)
-    : RayIntegrator(camera, sampler, aggregate, lights) {
-    maxDepth = 0.f;
-}
-
-SampledSpectrum DepthIntegrator::Li(RayDifferential ray, SampledWavelengths &lambda,
-                                    Sampler sampler, ScratchBuffer &scratchBuffer,
-                                    VisibleSurface *visibleSurface) const {
-
-    pstd::optional<ShapeIntersection> si = Intersect(ray);
-    if (!si) return SampledSpectrum(0.f);
-
-    float t = si->tHit;
-    if (t > maxDepth) {
-        maxDepth = t;
-        printf("%f", t);
-    }
-        
-    return SampledSpectrum(1.0f - (t / 46));
-
-}
-
-std::string DepthIntegrator::ToString() const {
-    return StringPrintf("[ BayisianMonteCarloIntegrator maxDepth: %d]");
-}
-
-std::unique_ptr<DepthIntegrator> DepthIntegrator::Create(
-    const ParameterDictionary &parameters, Camera camera, Sampler sampler,
-    Primitive aggregate, std::vector<Light> lights, const FileLoc *loc) {
-    bool sampleLights = parameters.GetOneBool("samplelights", true);
-    bool sampleBSDF = parameters.GetOneBool("samplebsdf", true);
-
-    return std::make_unique<DepthIntegrator>(sampleLights, sampleBSDF, camera, sampler,
-                                              aggregate, lights);
-
-}
-
 // Direct Integrator Classic Monte Carlo
 
 DirectIntegrator::DirectIntegrator(bool sampleLights, bool sampleBSDF,
@@ -4070,8 +4031,6 @@ SampledSpectrum AreaIntegrator::Li(RayDifferential ray, SampledWavelengths &lamb
         
     Float area, pdf, geoTerm;
     
-    if (!sampleLights) return SampledSpectrum(0.0f);
-
     pstd::optional<SampledLight> sampledLight = lightSampler.Sample(sampler.Get1D());
     if (!sampledLight) return SampledSpectrum(0.0f);
 
@@ -4173,7 +4132,7 @@ SampledSpectrum AreaIntegratorBMC::Li(RayDifferential ray, SampledWavelengths &l
     Float area, pdf, geoTerm;
 
     if (!sampleLights) {
-        return SampledSpectrum(0.0f);
+        return si->intr.Le(-ray.d, lambda);
     }
         
 
@@ -4333,10 +4292,7 @@ std::unique_ptr<Integrator> Integrator::Create(
                                             aggregate, lights, loc);
     else if (name == "bmc")
         integrator = BMCIntegrator::Create(parameters, camera, sampler, aggregate,
-                                                  lights, loc);
-    else if (name == "depth")
-        integrator = DepthIntegrator::Create(parameters, camera, sampler, aggregate,
-                                                 lights, loc);
+                                        lights, loc);
     else if (name == "direct")
         integrator = DirectIntegrator::Create(parameters, camera, sampler, aggregate,
                                                  lights, loc);

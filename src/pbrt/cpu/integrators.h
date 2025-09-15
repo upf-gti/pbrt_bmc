@@ -539,34 +539,6 @@ class BMCIntegrator : public RayIntegrator {
     uint32_t num_shading_samples = 50;
 };
 
-class DepthIntegrator : public RayIntegrator {
-  public:
-    // BayisianMonteCarloIntegrator Public Methods
-    DepthIntegrator(bool sampleLights, bool sampleBSDF, Camera camera, Sampler sampler,
-                     Primitive aggregate, std::vector<Light> lights);
-
-    SampledSpectrum Li(RayDifferential ray, SampledWavelengths &lambda, Sampler sampler,
-                       ScratchBuffer &scratchBuffer,
-                       VisibleSurface *visibleSurface) const;
-
-    static std::unique_ptr<DepthIntegrator> Create(const ParameterDictionary &parameters,
-                                                 Camera camera, Sampler sampler,
-                                                 Primitive aggregate,
-                                                 std::vector<Light> lights,
-                                                 const FileLoc *loc);
-
-    std::string ToString() const;
-
-    
-  private:
-    // Number of cached sample directions in the hemisphere
-    // Having very low values losses light intensity because currently our prior (expected
-    // mean) is 0
-    uint32_t num_shading_samples = 1;
-    mutable float maxDepth;
-    
-};
-
 class DirectIntegrator : public RayIntegrator {
   public:
     // BayisianMonteCarloIntegrator Public Methods
@@ -653,7 +625,7 @@ class AreaIntegrator : public RayIntegrator {
     // Number of cached sample directions in the hemisphere
     // Having very low values losses light intensity because currently our prior (expected
     // mean) is 0
-    uint32_t num_shading_samples = 64;
+    uint32_t num_shading_samples = 128;
     bool sampleLights, sampleBSDF;
     UniformLightSampler lightSampler;
 
@@ -681,7 +653,7 @@ class AreaIntegratorBMC : public RayIntegrator {
     // Number of cached sample directions in the hemisphere
     // Having very low values losses light intensity because currently our prior (expected
     // mean) is 0
-    uint32_t num_shading_samples = 64;
+    uint32_t num_shading_samples = 128;
     bool sampleLights, sampleBSDF;
     UniformLightSampler lightSampler;
     Point3f corner;
@@ -689,7 +661,7 @@ class AreaIntegratorBMC : public RayIntegrator {
 
 
     std::vector<BMC_area<Vector3f, SampledSpectrum> *> bmc_list;
-    uint32_t num_bmcs = 20;
+    uint32_t num_bmcs = 10;
 };
 
 
