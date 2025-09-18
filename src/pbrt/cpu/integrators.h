@@ -607,7 +607,7 @@ class DirectBMCIntegrator : public RayIntegrator {
 class AreaIntegrator : public RayIntegrator {
   public:
     // BayisianMonteCarloIntegrator Public Methods
-    AreaIntegrator(bool sampleLights, bool sampleBSDF, Camera camera, Sampler sampler,
+    AreaIntegrator(Camera camera, Sampler sampler,
                      Primitive aggregate, std::vector<Light> lights);
 
     SampledSpectrum Li(RayDifferential ray, SampledWavelengths &lambda, Sampler sampler,
@@ -626,17 +626,43 @@ class AreaIntegrator : public RayIntegrator {
     // Number of cached sample directions in the hemisphere
     // Having very low values losses light intensity because currently our prior (expected
     // mean) is 0
-    uint32_t num_shading_samples = 128;
-    bool sampleLights, sampleBSDF;
+    uint32_t num_shading_samples = 1;
     UniformLightSampler lightSampler;
 
+};
+
+// AreaIntegrator CMC Optimised Definition
+class AreaIntegrator2 : public RayIntegrator {
+  public:
+    // BayisianMonteCarloIntegrator Public Methods
+    AreaIntegrator2(Camera camera, Sampler sampler, Primitive aggregate,
+                   std::vector<Light> lights);
+
+    SampledSpectrum Li(RayDifferential ray, SampledWavelengths &lambda, Sampler sampler,
+                       ScratchBuffer &scratchBuffer,
+                       VisibleSurface *visibleSurface) const;
+
+    static std::unique_ptr<AreaIntegrator2> Create(const ParameterDictionary &parameters,
+                                                  Camera camera, Sampler sampler,
+                                                  Primitive aggregate,
+                                                  std::vector<Light> lights,
+                                                  const FileLoc *loc);
+
+    std::string ToString() const;
+
+  private:
+    // Number of cached sample directions in the hemisphere
+    // Having very low values losses light intensity because currently our prior (expected
+    // mean) is 0
+    uint32_t num_shading_samples = 64;
+    UniformLightSampler lightSampler;
 };
 
 // AreaIntegrator CMC Definition
 class AreaIntegratorBMC : public RayIntegrator {
   public:
     // BayisianMonteCarloIntegrator Public Methods
-    AreaIntegratorBMC(bool sampleLights, bool sampleBSDF, Camera camera, Sampler sampler,
+    AreaIntegratorBMC(Camera camera, Sampler sampler,
                       Primitive aggregate, std::vector<Light> lights);
 
     SampledSpectrum Li(RayDifferential ray, SampledWavelengths &lambda, Sampler sampler,
@@ -655,7 +681,6 @@ class AreaIntegratorBMC : public RayIntegrator {
     // Having very low values losses light intensity because currently our prior (expected
     // mean) is 0
     uint32_t num_shading_samples = 128;
-    bool sampleLights, sampleBSDF;
     UniformLightSampler lightSampler;
     Point3f corner;
     Vector3f diagonal;
@@ -669,7 +694,7 @@ class AreaIntegratorBMC : public RayIntegrator {
 class AreaIntegratorBMC_Geo : public RayIntegrator {
   public:
     // BayisianMonteCarloIntegrator Public Methods
-    AreaIntegratorBMC_Geo(bool sampleLights, bool sampleBSDF, Camera camera,
+    AreaIntegratorBMC_Geo(Camera camera,
                           Sampler sampler,
                       Primitive aggregate, std::vector<Light> lights);
 
@@ -689,8 +714,7 @@ class AreaIntegratorBMC_Geo : public RayIntegrator {
     // Number of cached sample directions in the hemisphere
     // Having very low values losses light intensity because currently our prior (expected
     // mean) is 0
-    uint32_t num_shading_samples = 34;
-    bool sampleLights, sampleBSDF;
+    uint32_t num_shading_samples = 32;
     UniformLightSampler lightSampler;
     Point3f corner;
     Vector3f diagonal;
