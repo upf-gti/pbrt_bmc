@@ -1,16 +1,14 @@
-Integrator "area"# "integer maxdepth" [ 1 ]
+Integrator "path" "integer maxdepth" [ 1 ]
 Transform [ 4.37113e-8 -0 -1 -0 -0 1 -0 -0 -1 -0 -4.37113e-8 -0 -0 -3.5 28.2792 1  ]
 Sampler "independent"
-    "integer pixelsamples" [ 1 ]
+    "integer pixelsamples" [ 64 ]
 PixelFilter "triangle"
     "float xradius" [ 1 ]
     "float yradius" [ 1 ]
 Film "rgb"
-    "string filename" [ "../scenes/veach-mis/TungstenRender.exr" ]
-    # "integer yresolution" [ 720 ]
-    # "integer xresolution" [ 1280 ]
-    "integer yresolution" [ 360 ]
-    "integer xresolution" [ 640 ]
+    "string filename" [ "veach-mis.png" ]
+    "integer yresolution" [ 720 ]
+    "integer xresolution" [ 1280 ]
 Camera "perspective"
     "float fov" [ 20.114292 ]
 
@@ -20,11 +18,36 @@ MakeNamedMaterial "Diffuse"
     "string type" [ "diffuse" ]
     "rgb reflectance" [ 0.5 0.5 0.5 ]
 MakeNamedMaterial "Smooth"
-    "string type" [ "diffuse" ]
-    "rgb reflectance" [ 0.7 0.7 0.7 ]
+    "string type" [ "conductor" ]
+    "float vroughness" [ 0.01 ]
+    "float uroughness" [ 0.01 ]
+    "bool remaproughness" [ false ]
+    "rgb k" [ 3.912949 2.452848 2.142188 ]
+    "rgb eta" [ 0.200438 0.924033 1.102212 ]
+MakeNamedMaterial "Glossy"
+    "string type" [ "conductor" ]
+    "float vroughness" [ 0.05 ]
+    "float uroughness" [ 0.05 ]
+    "bool remaproughness" [ false ]
+    "rgb k" [ 3.912949 2.452848 2.142188 ]
+    "rgb eta" [ 0.200438 0.924033 1.102212 ]
+MakeNamedMaterial "Rough"
+    "string type" [ "conductor" ]
+    "float vroughness" [ 0.1 ]
+    "float uroughness" [ 0.1 ]
+    "bool remaproughness" [ false ]
+    "rgb k" [ 3.912949 2.452848 2.142188 ]
+    "rgb eta" [ 0.200438 0.924033 1.102212 ]
 MakeNamedMaterial "Null"
     "string type" [ "diffuse" ]
     "rgb reflectance" [ 0 0 0 ]
+MakeNamedMaterial "SuperRough"
+    "string type" [ "conductor" ]
+    "float vroughness" [ 0.25 ]
+    "float uroughness" [ 0.25 ]
+    "bool remaproughness" [ false ]
+    "rgb k" [ 3.912949 2.452848 2.142188 ]
+    "rgb eta" [ 0.200438 0.924033 1.102212 ]
 NamedMaterial "Smooth"
 Shape "trianglemesh"
     "point2 uv" [ 0 0 1 0 1 1 0 1 
@@ -49,7 +72,7 @@ Shape "trianglemesh"
                  3.30966 -4 0.973649 3.30966 4 1.166 3.53988 4 ]
     "integer indices" [ 0 2 1 0 3 2 4 6 5 4 7 6 8 10 9 8 11 10 12 14 13 12 15 14 
                         16 18 17 16 19 18 20 22 21 20 23 22 ]
-NamedMaterial "Smooth"
+NamedMaterial "Glossy"
 Shape "trianglemesh"
     "point2 uv" [ 0 0 1 0 1 1 0 1 
         0 0 1 0 1 1 0 1 
@@ -73,7 +96,7 @@ Shape "trianglemesh"
                  2.18116 -4 3.97697 2.18116 4 4.0904 2.45889 4 ]
     "integer indices" [ 0 2 1 0 3 2 4 6 5 4 7 6 8 10 9 8 11 10 12 14 13 12 15 14 
                         16 18 17 16 19 18 20 22 21 20 23 22 ]
-NamedMaterial "Smooth"
+NamedMaterial "Rough"
 Shape "trianglemesh"
     "point2 uv" [ 0 0 1 0 1 1 0 1 
         0 0 1 0 1 1 0 1 
@@ -145,7 +168,7 @@ AttributeBegin
             "float radius" [ 0.05 ]
     AttributeEnd
 AttributeEnd
-NamedMaterial "Smooth"
+NamedMaterial "SuperRough"
 Shape "trianglemesh"
     "point2 uv" [ 0 0 1 0 1 1 0 1 
         0 0 1 0 1 1 0 1 

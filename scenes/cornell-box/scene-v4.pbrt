@@ -1,8 +1,10 @@
-Integrator "area" # "integer maxdepth" [1]
+Integrator "areabmc" # "integer maxdepth" [1]
 
 Transform [ 1 -0 -0 -0 -0 1 -0 -0 -0 -0 -1 -0 -0 -1 6.8 1  ]
-Sampler "independent"
-    "integer pixelsamples" [ 32 ]
+Sampler "stratified"
+    "bool jitter" [false]
+    "integer xsamples" [ 1 ]
+    "integer ysamples" [ 1 ]
 PixelFilter "triangle"
     "float xradius" [ 1 ]
     "float yradius" [ 1 ]
