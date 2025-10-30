@@ -3686,7 +3686,7 @@ Vector3f random_unit_vector() {
 }
 
 // Get random vector on an hemishpere facing the Z axis
-Vector3f random_on_hemisphere(const void *params) {
+Vector3f random_on_hemisphere() {
     Vector3f normal = Vector3f(0.0, 0.0, 1.0);
     Vector3f on_unit_sphere = random_unit_vector();
     if (Dot(on_unit_sphere, normal) > 0.0) {  // In the same hemisphere as the normal
@@ -3794,22 +3794,22 @@ std::unique_ptr<BMCIntegrator> BMCIntegrator::Create(
     bmc_integrator->bmc_list.resize(bmc_integrator->num_bmcs);
 
     for (uint32_t i = 0; i < bmc_integrator->num_bmcs; ++i) {
-
+        /*pbrt_kernel::sSobolevParams sobolev_params;
+        sobolev_params.s = 1.5f;*/
         pbrt_kernel::sSobolevParams *sobolev_params = new pbrt_kernel::sSobolevParams();
         sobolev_params->s = 1.5f;
 
         GaussianProcess<Vector3f, SampledSpectrum>::sKernelInfo kernel_info;
-        kernel_info.kernel = pbrt_kernel::sobolev;
+        //= {
+        kernel_info.kernel = eigen_kernel::sobolev;
         kernel_info.kernel_params = sobolev_params;
+        //};
 
         GaussianProcess<Vector3f, SampledSpectrum> *gaussian_process = new GaussianProcess<Vector3f, SampledSpectrum>(kernel_info, 0.01);
+        /*GaussianProcess<Vector3f, SampledSpectrum> *gaussian_process = new GaussianProcess<Vector3f, SampledSpectrum>(
+                pbrt_kernel::sobolev, &sobolev_params,
+                sizeof(pbrt_kernel::sSobolevParams), 0.01);*/
 
-        sSamplingParams *sampling_params = new sSamplingParams();
-        BMC<Vector3f, SampledSpectrum>::sSamplingInfo sampling_info;
-
-        sampling_info.sample = random_on_hemisphere;
-        sampling_info.sample_params = sampling_params;
-                
         // Set x number of samples (observation/training points), in our case directions
         std::vector<Vector3f> sample_directions;
         sample_directions.reserve(bmc_integrator->num_shading_samples);
@@ -3819,11 +3819,19 @@ std::unique_ptr<BMCIntegrator> BMCIntegrator::Create(
 
         // Generate x random directions in sphere and store in array
         for (uint32_t s_idx = 0; s_idx < bmc_integrator->num_shading_samples; s_idx++) {
-            sample_directions.push_back(random_on_hemisphere(sampling_params));
+            sample_directions.push_back(random_on_hemisphere());
         }
 
         // Fill the GP instance with the array of directions (observation points)
         gaussian_process->set_observations(sample_directions, {});
+
+        
+        sSamplingParams *sampling_params = new sSamplingParams();
+        BMC<Vector3f, SampledSpectrum>::sSamplingInfo sampling_info;
+        //= {
+        //sampling_info.sample = random_on_hemisphere;
+        sampling_info.sample_params = sampling_params;
+        //};
 
         bmc_integrator->bmc_list[i] = new BMC<Vector3f, SampledSpectrum>(sampling_info, gaussian_process);
     }
@@ -3902,11 +3910,9 @@ std::unique_ptr<DirectIntegrator> DirectIntegrator::Create(
 
     srand(1998);
 
-    sSamplingParams *sampling_params = new sSamplingParams();
-
     // Generate x random directions in sphere and store in array
     for (uint32_t s_idx = 0; s_idx < direct_integrator->num_shading_samples; s_idx++) {
-        sample_directions.push_back(random_on_hemisphere(sampling_params));
+        sample_directions.push_back(random_on_hemisphere());
     }
     direct_integrator->set_observations(sample_directions);
 

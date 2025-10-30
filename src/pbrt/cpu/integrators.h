@@ -536,7 +536,7 @@ class BMCIntegrator : public RayIntegrator {
     // Number of cached sample directions in the hemisphere
     // Having very low values losses light intensity because currently our prior (expected
     // mean) is 0
-    uint32_t num_shading_samples = 10;
+    uint32_t num_shading_samples = 512;
 };
 
 class DirectIntegrator : public RayIntegrator {
@@ -562,7 +562,7 @@ class DirectIntegrator : public RayIntegrator {
     // Number of cached sample directions in the hemisphere
     // Having very low values losses light intensity because currently our prior (expected
     // mean) is 0
-    uint32_t num_shading_samples = 32;
+    uint32_t num_shading_samples = 1000;
     std::vector<Vector3f> observation_positions;
 
     void set_observations(std::vector<Vector3f> positions) {
