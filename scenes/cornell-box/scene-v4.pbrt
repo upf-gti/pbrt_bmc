@@ -1,4 +1,4 @@
-Integrator "area" # "integer maxdepth" [1]
+Integrator "areabmc" # "integer maxdepth" [1]
 
 Transform [ 1 -0 -0 -0 -0 1 -0 -0 -0 -0 -1 -0 -0 -1 6.8 1  ]
 # Sampler "stratified"
@@ -65,24 +65,24 @@ NamedMaterial "BackWall"
 Shape "trianglemesh"
     "point2 uv" [ 0 0 1 0 1 1 0 1 
         ]
-    "normal N" [ 8.74228e-8 -4.37114e-8 -1 8.74228e-8 -4.37114e-8 -1 8.74228e-8 -4.37114e-8 
-                 -1 8.74228e-8 -4.37114e-8 -1 ]
+    "normal N" [ 8.74228e-8 -4.37114e-8 1 8.74228e-8 -4.37114e-8 1 8.74228e-8 -4.37114e-8 
+                 1 8.74228e-8 -4.37114e-8 1 ]
     "point3 P" [ -1 0 -1 -1 2 -1 1 2 -1 1 0 -1 ]
     "integer indices" [ 0 1 2 0 2 3 ]
 NamedMaterial "RightWall"
 Shape "trianglemesh"
     "point2 uv" [ 0 0 1 0 1 1 0 1 
         ]
-    "normal N" [ 1 -4.37114e-8 1.31134e-7 1 -4.37114e-8 1.31134e-7 1 -4.37114e-8 
-                 1.31134e-7 1 -4.37114e-8 1.31134e-7 ]
+    "normal N" [ -1 -4.37114e-8 1.31134e-7 -1 -4.37114e-8 1.31134e-7 -1 -4.37114e-8 
+                 1.31134e-7 -1 -4.37114e-8 1.31134e-7 ]
     "point3 P" [ 1 0 -1 1 2 -1 1 2 1 1 0 1 ]
     "integer indices" [ 0 1 2 0 2 3 ]
 NamedMaterial "LeftWall"
 Shape "trianglemesh"
     "point2 uv" [ 0 0 1 0 1 1 0 1 
         ]
-    "normal N" [ -1 -4.37114e-8 -4.37114e-8 -1 -4.37114e-8 -4.37114e-8 -1 -4.37114e-8 
-                 -4.37114e-8 -1 -4.37114e-8 -4.37114e-8 ]
+    "normal N" [ 1 -4.37114e-8 -4.37114e-8 1 -4.37114e-8 -4.37114e-8 1 -4.37114e-8 
+                 -4.37114e-8 1 -4.37114e-8 -4.37114e-8 ]
     "point3 P" [ -1 0 1 -1 2 1 -1 2 -1 -1 0 -1 ]
     "integer indices" [ 0 1 2 0 2 3 ]
 NamedMaterial "ShortBox"

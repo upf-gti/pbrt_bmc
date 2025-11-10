@@ -3675,7 +3675,7 @@ Vector3f random(Float min, Float max) {
 };
 
 // Get a random unit vector
-Vector3f random_unit_vector() {
+static Vector3f random_unit_vector() {
     while (true) {
         Vector3f p = random(-1.0, 1.0);
         Float len_sq = LengthSquared(p);
@@ -3686,15 +3686,19 @@ Vector3f random_unit_vector() {
 }
 
 // Get random vector on an hemishpere facing the Z axis
-Vector3f random_on_hemisphere() {
-    Vector3f normal = Vector3f(0.0, 0.0, 1.0);
+static Vector3f random_on_hemisphere(const void* data) {
+    const Vector3f* normal = static_cast<const Vector3f*>(data);
     Vector3f on_unit_sphere = random_unit_vector();
-    if (Dot(on_unit_sphere, normal) > 0.0) {  // In the same hemisphere as the normal
+    if (Dot(on_unit_sphere, *normal) > 0.0) {  // In the same hemisphere as the normal
         return on_unit_sphere;
     } else {
         return -on_unit_sphere;
     }
 }
+
+struct sSamplingParams {
+    Vector3f normal = Vector3f(0.0, 0.0, 1.0);
+};
 
 BMCIntegrator::BMCIntegrator(int maxDepth, bool sampleLights, bool sampleBSDF,
                              Camera camera, Sampler sampler, Primitive aggregate,
@@ -3790,10 +3794,12 @@ std::unique_ptr<BMCIntegrator> BMCIntegrator::Create(
     bmc_integrator->bmc_list.resize(bmc_integrator->num_bmcs);
 
     for (uint32_t i = 0; i < bmc_integrator->num_bmcs; ++i) {
+
         pbrt_kernel::sSobolevParams *sobolev_params = new pbrt_kernel::sSobolevParams();
         sobolev_params->s = 1.5f;
 
         GaussianProcess<Vector3f, SampledSpectrum>::sKernelInfo kernel_info;
+
         kernel_info.kernel = pbrt_kernel::sobolev;
         kernel_info.kernel_params = sobolev_params;
 
@@ -3807,16 +3813,22 @@ std::unique_ptr<BMCIntegrator> BMCIntegrator::Create(
 
         // Victor's birth year plus offset :)
         srand(1998 + i);
-
+                
         // Generate x random directions in sphere and store in array
+        Vector3f normal = Vector3f(0.0, 0.0, 1.0);
         for (uint32_t s_idx = 0; s_idx < bmc_integrator->num_shading_samples; s_idx++) {
-            sample_directions.push_back(random_on_hemisphere());
+            sample_directions.push_back(random_on_hemisphere(&normal));
         }
 
         // Fill the GP instance with the array of directions (observation points)
         gaussian_process->set_observations(sample_directions, {});
 
-        bmc_integrator->bmc_list[i] = new BMC<Vector3f, SampledSpectrum>(random_on_hemisphere, gaussian_process);
+        sSamplingParams *sampling_params = new sSamplingParams();
+        BMC<Vector3f, SampledSpectrum>::sSamplingInfo sampling_info;
+        sampling_info.sample = random_on_hemisphere;
+        sampling_info.sample_params = sampling_params;
+
+        bmc_integrator->bmc_list[i] = new BMC<Vector3f, SampledSpectrum>(sampling_info, gaussian_process);
     }
 
     return bmc_integrator;
@@ -3894,8 +3906,9 @@ std::unique_ptr<DirectIntegrator> DirectIntegrator::Create(
     srand(1998);
 
     // Generate x random directions in sphere and store in array
+    Vector3f normal = Vector3f(0.0, 0.0, 1.0);
     for (uint32_t s_idx = 0; s_idx < direct_integrator->num_shading_samples; s_idx++) {
-        sample_directions.push_back(random_on_hemisphere());
+        sample_directions.push_back(random_on_hemisphere(&normal));
     }
     direct_integrator->set_observations(sample_directions);
 
@@ -3904,101 +3917,110 @@ std::unique_ptr<DirectIntegrator> DirectIntegrator::Create(
 
 // Direct BMC Integrator
 
-//DirectBMCIntegrator::DirectBMCIntegrator(bool sampleLights, bool sampleBSDF,
-//                             Camera camera, Sampler sampler, Primitive aggregate,
-//                             std::vector<Light> lights)
-//    : RayIntegrator(camera, sampler, aggregate, lights) {}
-//
-//
-//SampledSpectrum DirectBMCIntegrator::Li(RayDifferential ray, SampledWavelengths &lambda,
-//                                  Sampler sampler, ScratchBuffer &scratchBuffer,
-//                                  VisibleSurface *visibleSurface) const {
-//    
-//    
-//    SampledSpectrum L(0.f);
-//    pstd::optional<ShapeIntersection> si, random_si;
-//    si = Intersect(ray);  
-//
-//    uint32_t randomGP = rand() % num_bmcs;
-//    BMC<Vector3f, SampledSpectrum> *bmc = bmc_list[randomGP];
-//
-//    std::vector<SampledSpectrum> radianceSamples;
-//
-//    Float alpha = 2.0 * PI * rand() / (Float)RAND_MAX;
-//    
-//    SurfaceInteraction &isect = si->intr;
-//
-//    BSDF bsdf = isect.GetBSDF(ray, lambda, camera, scratchBuffer, sampler);
-//
-//    Vector3f woWorld, wiLocal, wiWorld;
-//    woWorld = -ray.d;
-//
-//    for (uint32_t sIdx = 0; sIdx < num_shading_samples; sIdx++)
-//    {
-//        wiLocal = bmc->get_gaussian_process()->get_observation(sIdx);
-//        wiLocal = rotate_around_z(wiLocal, alpha);
-//        wiWorld = Normalize(bsdf.LocalToRender(wiLocal));
-//
-//        SampledSpectrum bsdfVal = bsdf.f(woWorld, wiWorld);
-//
-//        RayDifferential nextRay = isect.SpawnRay(wiWorld);
-//        random_si = Intersect(nextRay);
-//        if (!random_si)
-//            continue;
-//
-//        radianceSamples.push_back(random_si->intr.Le(-nextRay.d, lambda) * bsdfVal);
-//    }
-//    bmc->compute_integral(radianceSamples, L);
-//
-//    L += si->intr.Le(-ray.d, lambda);  // emitted light from x
-//    return L;
-//}
-//
-//std::string DirectBMCIntegrator::ToString() const {
-//    return StringPrintf("[ BayisianMonteCarloIntegrator maxDepth: %d]");
-//}
-//
-//std::unique_ptr<DirectBMCIntegrator> DirectBMCIntegrator::Create(
-//    const ParameterDictionary &parameters, Camera camera, Sampler sampler,
-//    Primitive aggregate, std::vector<Light> lights, const FileLoc *loc) {
-//    bool sampleLights = parameters.GetOneBool("samplelights", true);
-//    bool sampleBSDF = parameters.GetOneBool("samplebsdf", true);
-//
-//    std::unique_ptr<DirectBMCIntegrator> bmc_integrator =
-//        std::make_unique<DirectBMCIntegrator>(sampleLights, sampleBSDF, camera, sampler, aggregate, lights);
-//
-//    bmc_integrator->bmc_list.resize(bmc_integrator->num_bmcs);
-//
-//    for (uint32_t i = 0; i < bmc_integrator->num_bmcs; ++i) {
-//        pbrt_kernel::sSobolevParams sobolev_params;
-//        sobolev_params.s = 1.5f;
-//
-//        GaussianProcess<Vector3f, SampledSpectrum> *gaussian_process =
-//            new GaussianProcess<Vector3f, SampledSpectrum>(
-//                pbrt_kernel::sobolev, &sobolev_params,
-//                sizeof(pbrt_kernel::sSobolevParams), 0.01);
-//
-//        // Set x number of samples (observation/training points), in our case directions
-//        std::vector<Vector3f> sample_directions;
-//        sample_directions.reserve(bmc_integrator->num_shading_samples);
-//
-//        // Victor's birth year plus offset :)
-//        srand(1998 + i);
-//
-//        // Generate x random directions in sphere and store in array
-//        for (uint32_t s_idx = 0; s_idx < bmc_integrator->num_shading_samples; s_idx++) {
-//            sample_directions.push_back(random_on_hemisphere());
-//        }
-//
-//        // Fill the GP instance with the array of directions (observation points)
-//        gaussian_process->set_observations(sample_directions, {});
-//
-//        bmc_integrator->bmc_list[i] = new BMC<Vector3f, SampledSpectrum>(random_on_hemisphere, gaussian_process);
-//    }
-//
-//
-//    return bmc_integrator;
-//}
+DirectBMCIntegrator::DirectBMCIntegrator(bool sampleLights, bool sampleBSDF,
+                             Camera camera, Sampler sampler, Primitive aggregate,
+                             std::vector<Light> lights)
+    : RayIntegrator(camera, sampler, aggregate, lights) {}
+
+
+SampledSpectrum DirectBMCIntegrator::Li(RayDifferential ray, SampledWavelengths &lambda,
+                                  Sampler sampler, ScratchBuffer &scratchBuffer,
+                                  VisibleSurface *visibleSurface) const {
+    
+    
+    SampledSpectrum L(0.f);
+    pstd::optional<ShapeIntersection> si, random_si;
+    si = Intersect(ray);  
+
+    uint32_t randomGP = rand() % num_bmcs;
+    BMC<Vector3f, SampledSpectrum> *bmc = bmc_list[randomGP];
+
+    std::vector<SampledSpectrum> radianceSamples;
+
+    Float alpha = 2.0 * PI * rand() / (Float)RAND_MAX;
+    
+    SurfaceInteraction &isect = si->intr;
+
+    BSDF bsdf = isect.GetBSDF(ray, lambda, camera, scratchBuffer, sampler);
+
+    Vector3f woWorld, wiLocal, wiWorld;
+    woWorld = -ray.d;
+
+    for (uint32_t sIdx = 0; sIdx < num_shading_samples; sIdx++)
+    {
+        wiLocal = bmc->get_gaussian_process()->get_observation(sIdx);
+        wiLocal = rotate_around_z(wiLocal, alpha);
+        wiWorld = Normalize(bsdf.LocalToRender(wiLocal));
+
+        SampledSpectrum bsdfVal = bsdf.f(woWorld, wiWorld);
+
+        RayDifferential nextRay = isect.SpawnRay(wiWorld);
+        random_si = Intersect(nextRay);
+        if (!random_si)
+            continue;
+
+        radianceSamples.push_back(random_si->intr.Le(-nextRay.d, lambda) * bsdfVal);
+    }
+    bmc->compute_integral(radianceSamples, L);
+
+    L += si->intr.Le(-ray.d, lambda);  // emitted light from x
+    return L;
+}
+
+std::string DirectBMCIntegrator::ToString() const {
+    return StringPrintf("[ BayisianMonteCarloIntegrator maxDepth: %d]");
+}
+
+std::unique_ptr<DirectBMCIntegrator> DirectBMCIntegrator::Create(
+    const ParameterDictionary &parameters, Camera camera, Sampler sampler,
+    Primitive aggregate, std::vector<Light> lights, const FileLoc *loc) {
+    bool sampleLights = parameters.GetOneBool("samplelights", true);
+    bool sampleBSDF = parameters.GetOneBool("samplebsdf", true);
+
+    std::unique_ptr<DirectBMCIntegrator> bmc_integrator =
+        std::make_unique<DirectBMCIntegrator>(sampleLights, sampleBSDF, camera, sampler, aggregate, lights);
+
+    bmc_integrator->bmc_list.resize(bmc_integrator->num_bmcs);
+
+    for (uint32_t i = 0; i < bmc_integrator->num_bmcs; ++i) {
+        pbrt_kernel::sSobolevParams *sobolev_params = new pbrt_kernel::sSobolevParams();
+        sobolev_params->s = 1.5f;
+
+        GaussianProcess<Vector3f, SampledSpectrum>::sKernelInfo kernel_info;
+
+        kernel_info.kernel = pbrt_kernel::sobolev;
+        kernel_info.kernel_params = sobolev_params;
+
+        GaussianProcess<Vector3f, SampledSpectrum> *gaussian_process =
+            new GaussianProcess<Vector3f, SampledSpectrum>(kernel_info, 0.01);
+
+        // Set x number of samples (observation/training points), in our case directions
+        std::vector<Vector3f> sample_directions;
+        sample_directions.reserve(bmc_integrator->num_shading_samples);
+
+        // Victor's birth year plus offset :)
+        srand(1998 + i);
+
+        // Generate x random directions in sphere and store in array
+        Vector3f normal = Vector3f(0.0, 0.0, 1.0);
+        for (uint32_t s_idx = 0; s_idx < bmc_integrator->num_shading_samples; s_idx++) {
+            sample_directions.push_back(random_on_hemisphere(&normal));
+        }
+
+        // Fill the GP instance with the array of directions (observation points)
+        gaussian_process->set_observations(sample_directions, {});
+
+        sSamplingParams *sampling_params = new sSamplingParams();
+        BMC<Vector3f, SampledSpectrum>::sSamplingInfo sampling_info;
+        sampling_info.sample = random_on_hemisphere;
+        sampling_info.sample_params = sampling_params;
+
+        bmc_integrator->bmc_list[i] = new BMC<Vector3f, SampledSpectrum>(sampling_info, gaussian_process);
+    }
+
+
+    return bmc_integrator;
+}
 
 // Area CMC Integrator
 
@@ -4011,7 +4033,7 @@ AreaIntegrator::AreaIntegrator(Camera camera,
 SampledSpectrum AreaIntegrator::Li(RayDifferential ray, SampledWavelengths &lambda,
                                      Sampler sampler, ScratchBuffer &scratchBuffer,
                                      VisibleSurface *visibleSurface) const {
-    pstd::optional<ShapeIntersection> si, random_si;
+    pstd::optional<ShapeIntersection> si;
     si = Intersect(ray);
 
     if (!si) return SampledSpectrum(0.0f);
@@ -4020,35 +4042,56 @@ SampledSpectrum AreaIntegrator::Li(RayDifferential ray, SampledWavelengths &lamb
     BSDF bsdf = isect.GetBSDF(ray, lambda, camera, scratchBuffer, sampler);
     if (!bsdf) return SampledSpectrum(0.0f);
 
-    SampledSpectrum L(0.0f), f;
+    SampledSpectrum L(0.0f);
     
-    Point3f x, y;
+    Point3f x;
     x = isect.p();
 
     Vector3f wo = -ray.d;
-
-    Normal3f nx, ny;
-    nx = isect.n;
-    
-    for (uint32_t i = 0; i < num_shading_samples; i++) {
         
-        pstd::optional<SampledLight> sampledLight = lightSampler.Sample(sampler.Get1D());
-        if (!sampledLight)
-            continue;
-        Point2f u_point = {rand() / (float)RAND_MAX, rand() / (float)RAND_MAX};
-        pstd::optional<LightLiSample> ls = sampledLight->light.SampleLi(isect, u_point, lambda);
+    //for (uint32_t i = 0; i < num_shading_samples; i++) {
+    //    
+    //    pstd::optional<SampledLight> sampledLight = lightSampler.Sample(sampler.Get1D());
+    //    if (!sampledLight)
+    //        continue;
+    //    Point2f u_point = {rand() / (float)RAND_MAX, rand() / (float)RAND_MAX};
+    //    pstd::optional<LightLiSample> ls = sampledLight->light.SampleLi(isect, u_point, lambda);
 
-        if (ls && ls->L && ls->pdf > 0) {
-            f = bsdf.f(wo, ls->wi) * AbsDot(ls->wi, isect.shading.n);
-            if (f && Unoccluded(isect, ls->pLight))
-                L += f * ls->L / (sampledLight->p * ls->pdf);
+    //    if (ls && ls->L && ls->pdf > 0) {
+    //        f = bsdf.f(wo, ls->wi) * Dot(ls->wi, isect.shading.n);
+    //        if (f && Unoccluded(isect, ls->pLight))
+    //            L += f * ls->L / (sampledLight->p * ls->pdf);
+    //    }
+    //}
+
+    for (uint32_t i = 0; i < num_shading_samples; i++) {
+        pstd::optional<SampledLight> sampledLight =
+            lightSampler.Sample(rand() / (float)RAND_MAX);
+        if (sampledLight)
+        {
+            Point2f u_point = {rand() / (float)RAND_MAX, rand() / (float)RAND_MAX};
+            pstd::optional<LightLiSample> ls = sampledLight->light.SampleLi(isect, u_point, lambda);
+
+            if (ls && ls->L && ls->pdf > 0) {
+                Vector3f wi = Normalize(Vector3f(ls->pLight.p() - x));
+                SampledSpectrum f = bsdf.f(wo, wi) * Dot(wi, isect.shading.n);
+                if (f && Unoccluded(isect, ls->pLight))
+                {
+                    Vector3f diag = sampledLight->light.Bounds()->bounds.Diagonal();
+                    Float area = diag.x * diag.y + diag.x * diag.z + diag.y * diag.z;
+                    Float pdf = 1.0 / area;
+                    Float geo = Dot(-wi, ls->pLight.n) / LengthSquared(Vector3f(ls->pLight.p() - x));
+                    L += f * ls->L * geo / pdf;
+                }
+            }
         }
-
     }
+
     L /= (num_shading_samples);
 
     L += si->intr.Le(-ray.d, lambda);  // emitted light from x
-    if (L.Average() < 0.0f) return SampledSpectrum(0.0f);
+    if (L[0] < 0.0f || L[1] < 0.0f || L[2] < 0.0f)
+        return SampledSpectrum(0.0f);
     return L;
 }
 
@@ -4068,158 +4111,159 @@ std::unique_ptr<AreaIntegrator> AreaIntegrator::Create(
 
 // Area BMC Integrator
 
-//Vector3f AreaIntegratorBMC::random_on_area() {
-//
-//    Float r1 = rand() / (Float)RAND_MAX;
-//    Float r2 = rand() / (Float)RAND_MAX;
-//
-//    return Vector3f(corner.x + r1 * diagonal.x, corner.y, corner.z + r2 * diagonal.z);
-//}
-//
-//AreaIntegratorBMC::AreaIntegratorBMC(Camera camera,
-//                                     Sampler sampler, Primitive aggregate,
-//                                     std::vector<Light> lights)
-//    : RayIntegrator(camera, sampler, aggregate, lights),
-//      lightSampler(lights, Allocator()) {
-//
-//        pstd::optional<SampledLight> sampledLight = lightSampler.Sample(sampler.Get1D());
-//        corner = sampledLight->light.Bounds()->bounds.pMin;
-//        diagonal = sampledLight->light.Bounds()->bounds.Diagonal();
-//}
-//
-//SampledSpectrum AreaIntegratorBMC::Li(RayDifferential ray, SampledWavelengths &lambda,
-//                                      Sampler sampler, ScratchBuffer &scratchBuffer,
-//                                      VisibleSurface *visibleSurface) const {
-//
-//    pstd::optional<ShapeIntersection> si, random_si;
-//    si = Intersect(ray);
-//
-//    if (!si)
-//        return SampledSpectrum(0.0f);
-//    SurfaceInteraction &isect = si->intr;
-//
-//    BSDF bsdf = isect.GetBSDF(ray, lambda, camera, scratchBuffer, sampler);
-//    if (!bsdf)
-//        return SampledSpectrum(0.0f);
-//
-//    SampledSpectrum L(0.0f);
-//
-//    Point3f x;
-//    x = isect.p();
-//
-//    Vector3f wo, wi, y;
-//    wo = -ray.d;
-//
-//    Normal3f nx, ny;
-//    nx = isect.n;
-//
-//    Float area, pdf, geoTerm;
-//
-//    pstd::optional<SampledLight> sampledLight = lightSampler.Sample(sampler.Get1D());
-//    if (!sampledLight) {
-//        return SampledSpectrum(0.0f);
-//    }
-//
-//    area = sampledLight->light.Bounds()->bounds.SurfaceArea() / 2;
-//    pdf = (1.0 / area);
-//
-//    Point2f u_point = sampler.Get2D();
-//    pstd::optional<LightLiSample> ls = sampledLight->light.SampleLi(isect, u_point, lambda);
-//
-//    if (!ls) {
-//        return si->intr.Le(-ray.d, lambda);
-//    }
-//    
-//    ny = ls->pLight.n;
-//
-//    uint32_t randomGP = rand() % num_bmcs;
-//    BMC_area<Vector3f, SampledSpectrum> *bmc = bmc_list[randomGP];
-//
-//    std::vector<SampledSpectrum> radianceSamples;
-//    Interaction ls_pLight;
-//
-//    for (uint32_t i = 0; i < num_shading_samples; i++) {
-//    
-//        y = bmc->get_gaussian_process()->get_observation(i);
-//        
-//        u_point = sampler.Get2D();
-//
-//        ls_pLight = Interaction(Point3f(y), u_point);
-//
-//        // Visibility function
-//        if (!Unoccluded(isect, ls_pLight)) {
-//            radianceSamples.push_back(SampledSpectrum(0.0f));
-//            continue;
-//        }
-//
-//        wi = Normalize(y - Vector3f(x.x, x.y, x.z));
-//
-//        geoTerm = AbsDot(wi, nx) * AbsDot(-wi, ny) / LengthSquared(y - Vector3f(x.x, x.y, x.z));
-//
-//        radianceSamples.push_back(ls->L * bsdf.f(wo, wi) * geoTerm/ pdf);
-//    }
-//
-//    bmc->compute_integral(radianceSamples, L);
-//
-//    L += si->intr.Le(-ray.d, lambda);  // emitted light from x
-//
-//    if (L.Average() < 0.0f) return SampledSpectrum(0.0f);
-//    
-//    return L;
-//}
-//
-//std::string AreaIntegratorBMC::ToString() const {
-//    return StringPrintf("[ BayisianMonteCarloIntegrator maxDepth: %d]");
-//}
-//
-//std::unique_ptr<AreaIntegratorBMC> AreaIntegratorBMC::Create(
-//    const ParameterDictionary &parameters, Camera camera, Sampler sampler,
-//    Primitive aggregate, std::vector<Light> lights, const FileLoc *loc) {
-//
-//    std::unique_ptr<AreaIntegratorBMC> area_integrator =
-//        std::make_unique<AreaIntegratorBMC>(camera, sampler,
-//                                            aggregate, lights);
-//
-//    //--------
-//    area_integrator->bmc_list.resize(area_integrator->num_bmcs);
-//
-//    std::vector<Vector3f> z_points, sample_points;
-//   
-//    for (uint32_t i = 0; i < area_integrator->num_bmcs; ++i) {
-//        pbrt_kernel::sAreaParams area_params;
-//        area_params.h = Length(area_integrator->diagonal);
-//
-//        GaussianProcess<Vector3f, SampledSpectrum> *gaussian_process = new GaussianProcess<Vector3f, SampledSpectrum>(pbrt_kernel::kernel_area, &area_params, sizeof(pbrt_kernel::sAreaParams), 0.01);
-//
-//        // Set x number of samples (observation/training points), in our case directions
-//        sample_points.clear();
-//        sample_points.reserve(area_integrator->num_shading_samples);
-//        
-//        // Victor's birth year plus offset :)
-//        srand(1998 + i);    
-//
-//        // Generate x random directions in sphere and store in array
-//        for (uint32_t s_idx = 0; s_idx < area_integrator->num_shading_samples; s_idx++) {
-//            sample_points.push_back(area_integrator->random_on_area());
-//        }
-//        
-//        // Fill the GP instance with the array of directions (observation points)
-//        gaussian_process->set_observations(sample_points, {});
-//        
-//        area_integrator->bmc_list[i] = new BMC_area<Vector3f, SampledSpectrum>(gaussian_process);
-//
-//        z_points.clear();
-//        z_points.reserve(area_integrator->bmc_list[i]->get_num_z_samples());
-//        for (uint32_t z = 0; z < area_integrator->bmc_list[i]->get_num_z_samples(); z++) {
-//            z_points.push_back(area_integrator->random_on_area());
-//        }
-//        
-//        area_integrator->bmc_list[i]->calculate_weights(z_points);
-//        
-//    }
-//
-//    return area_integrator;
-//}
+static Vector3f random_on_area(const void* data) {
+    const Vector3f *params = static_cast<const Vector3f *>(data);
+    Vector3f corner = params[0];
+    Vector3f diagonal = params[1];
+
+    Float r1 = rand() / (Float)RAND_MAX;
+    Float r2 = rand() / (Float)RAND_MAX;
+
+    return Vector3f(corner.x + r1 * diagonal.x, corner.y, corner.z + r2 * diagonal.z);
+}
+
+struct sSamplingParams_area {
+    Vector3f corner;
+    Vector3f diagonal;
+};
+
+AreaIntegratorBMC::AreaIntegratorBMC(Camera camera,
+                                     Sampler sampler, Primitive aggregate,
+                                     std::vector<Light> lights)
+    : RayIntegrator(camera, sampler, aggregate, lights),
+      lightSampler(lights, Allocator()) {}
+
+SampledSpectrum AreaIntegratorBMC::Li(RayDifferential ray, SampledWavelengths &lambda,
+                                      Sampler sampler, ScratchBuffer &scratchBuffer,
+                                      VisibleSurface *visibleSurface) const {
+
+    pstd::optional<ShapeIntersection> si;
+    si = Intersect(ray);
+
+    if (!si) return SampledSpectrum(0.0f);
+    SurfaceInteraction &isect = si->intr;
+
+    BSDF bsdf = isect.GetBSDF(ray, lambda, camera, scratchBuffer, sampler);
+    if (!bsdf) return SampledSpectrum(0.0f);
+
+    Point3f x;
+    x = isect.p();
+
+    Vector3f wo = -ray.d;
+
+    uint32_t randomGP = rand() % num_bmcs;
+    BMC<Vector3f, SampledSpectrum> *bmc = bmc_list[randomGP];
+
+    std::vector<SampledSpectrum> radianceSamples;
+    SampledSpectrum Ld(0.0f);
+    Vector3f n;
+    pstd::optional<SampledLight> sampledLight = lightSampler.Sample((Float)(rand() / RAND_MAX));
+    if (sampledLight) {
+        pstd::optional<LightLiSample> ls = sampledLight->light.SampleLi(isect, {0.5f, 0.5f}, lambda);
+        if (ls && ls->L && ls->pdf > 0) {
+            n = Vector3f(ls->pLight.n);
+            Ld = ls->L;
+        }
+    }
+        
+    for (uint32_t i = 0; i < num_shading_samples; i++) {
+        pstd::optional<SampledLight> sampledLight = lightSampler.Sample((Float)(rand() / RAND_MAX));
+        
+        if (sampledLight) {
+            Point2f u_point = {(Float)(rand() / RAND_MAX), (Float)(rand() / RAND_MAX)};
+            Vector3f y = bmc->get_gaussian_process()->get_observation(i);
+
+            Interaction ls_pLight = Interaction(Point3f(y.x, y.y, y.z), u_point);
+
+            Vector3f wi = Normalize(y - Vector3f(x.x, x.y, x.z));
+
+            SampledSpectrum f = bsdf.f(wo, wi) * Dot(wi, isect.shading.n);
+
+            // Visibility function
+            if (f && Unoccluded(isect, ls_pLight)) {
+                Vector3f diag = sampledLight->light.Bounds()->bounds.Diagonal();
+                Float area = diag.x * diag.y + diag.x * diag.z + diag.y * diag.z;
+                Float pdf = 1.0 / area;
+                Float geo = Dot(-wi, n) / LengthSquared(y - Vector3f(x.x, x.y, x.z));
+                SampledSpectrum p = f * Ld * geo / pdf;
+                radianceSamples.push_back(p);
+            } else {
+                radianceSamples.push_back(SampledSpectrum(0.0f));
+            }
+            
+        }
+    }
+    
+    SampledSpectrum L(0.0f);
+    bmc->compute_integral(radianceSamples, L);
+    L += si->intr.Le(-ray.d, lambda);  // emitted light from x
+    
+    return L;
+}
+
+std::string AreaIntegratorBMC::ToString() const {
+    return StringPrintf("[ BayisianMonteCarloIntegrator maxDepth: %d]");
+}
+
+std::unique_ptr<AreaIntegratorBMC> AreaIntegratorBMC::Create(
+    const ParameterDictionary &parameters, Camera camera, Sampler sampler,
+    Primitive aggregate, std::vector<Light> lights, const FileLoc *loc) {
+
+    std::unique_ptr<AreaIntegratorBMC> area_integrator =
+        std::make_unique<AreaIntegratorBMC>(camera, sampler,
+                                            aggregate, lights);
+
+    //--------
+    area_integrator->bmc_list.resize(area_integrator->num_bmcs);
+
+    std::vector<Vector3f> z_points, sample_points;
+
+    pstd::optional<SampledLight> sampledLight =
+        area_integrator->get_light_sampler().Sample(rand() / (float)RAND_MAX);
+    Point3f c = sampledLight->light.Bounds()->bounds.pMin;
+    Vector3f d = sampledLight->light.Bounds()->bounds.Diagonal();
+   
+    for (uint32_t i = 0; i < area_integrator->num_bmcs; ++i) {
+        pbrt_kernel::sAreaParams *area_params = new pbrt_kernel::sAreaParams();
+        area_params->h = Length(d);
+
+        GaussianProcess<Vector3f, SampledSpectrum>::sKernelInfo kernel_info;
+        kernel_info.kernel = pbrt_kernel::kernel_area;
+        kernel_info.kernel_params = area_params;
+
+        GaussianProcess<Vector3f, SampledSpectrum> *gaussian_process =
+            new GaussianProcess<Vector3f, SampledSpectrum>(kernel_info, 0.01);
+
+        // Set x number of samples (observation/training points), in our case directions
+        sample_points.clear();
+        sample_points.reserve(area_integrator->num_shading_samples);
+        
+        // Victor's birth year plus offset :)
+        srand(1998 + i);
+
+        sSamplingParams_area *sampling_params = new sSamplingParams_area();
+        sampling_params->corner = Vector3f(c[0], c[1], c[2]);
+        sampling_params->diagonal = d;
+        
+        // Generate x random directions in sphere and store in array
+        for (uint32_t s_idx = 0; s_idx < area_integrator->num_shading_samples; s_idx++) {
+            sample_points.push_back(random_on_area(&sampling_params));
+        }
+        
+        // Fill the GP instance with the array of directions (observation points)
+        gaussian_process->set_observations(sample_points, {});
+        
+        BMC<Vector3f, SampledSpectrum>::sSamplingInfo sampling_info;
+        sampling_info.sample = random_on_area;
+        sampling_info.sample_params = sampling_params;
+
+        area_integrator->bmc_list[i] =
+            new BMC<Vector3f, SampledSpectrum>(sampling_info, gaussian_process);
+        
+    }
+
+    return area_integrator;
+}
 
 //-------------------------------------------------------------------
 
@@ -4265,14 +4309,14 @@ std::unique_ptr<Integrator> Integrator::Create(
     else if (name == "direct")
         integrator = DirectIntegrator::Create(parameters, camera, sampler, aggregate,
                                                  lights, loc);
-    //else if (name == "directbmc")
-    //    integrator = DirectBMCIntegrator::Create(parameters, camera, sampler, aggregate, lights, loc);
+    else if (name == "directbmc")
+        integrator = DirectBMCIntegrator::Create(parameters, camera, sampler, aggregate, lights, loc);
 
     else if (name == "area")
         integrator = AreaIntegrator::Create(parameters, camera, sampler, aggregate,
                                                  lights, loc);
-    //else if (name == "areabmc")
-    //    integrator = AreaIntegratorBMC::Create(parameters, camera, sampler, aggregate, lights, loc);
+    else if (name == "areabmc")
+        integrator = AreaIntegratorBMC::Create(parameters, camera, sampler, aggregate, lights, loc);
 
     else
         ErrorExit(loc, "%s: integrator type unknown.", name);
