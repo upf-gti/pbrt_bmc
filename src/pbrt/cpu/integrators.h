@@ -541,8 +541,7 @@ class BMCIntegrator : public RayIntegrator {
 class DirectIntegrator : public RayIntegrator {
   public:
     // BayisianMonteCarloIntegrator Public Methods
-    DirectIntegrator(bool sampleLights, bool sampleBSDF, Camera camera,
-                  Sampler sampler, Primitive aggregate, std::vector<Light> lights);
+    DirectIntegrator(Camera camera, Sampler sampler, Primitive aggregate, std::vector<Light> lights);
 
     SampledSpectrum Li(RayDifferential ray, SampledWavelengths &lambda, Sampler sampler,
                        ScratchBuffer &scratchBuffer,
@@ -563,18 +562,13 @@ class DirectIntegrator : public RayIntegrator {
     // mean) is 0
     uint32_t num_shading_samples = 64;
     std::vector<Vector3f> observation_positions;
-
-    void set_observations(std::vector<Vector3f> positions) {
-        this->observation_positions = positions;
-    }
 };
 
 // BayisianMonteCarloIntegrator Definition
 class DirectBMCIntegrator : public RayIntegrator {
   public:
     // BayisianMonteCarloIntegrator Public Methods
-    DirectBMCIntegrator(bool sampleLights, bool sampleBSDF, Camera camera,
-                  Sampler sampler, Primitive aggregate, std::vector<Light> lights);
+    DirectBMCIntegrator(Camera camera, Sampler sampler, Primitive aggregate, std::vector<Light> lights);
 
     SampledSpectrum Li(RayDifferential ray, SampledWavelengths &lambda, Sampler sampler,
                        ScratchBuffer &scratchBuffer,
@@ -651,14 +645,14 @@ class AreaIntegratorBMC : public RayIntegrator {
     // Number of cached sample directions in the hemisphere
     // Having very low values losses light intensity because currently our prior (expected
     // mean) is 0
-    uint32_t num_shading_samples = 8;
+    uint32_t num_shading_samples = 32;
     UniformLightSampler lightSampler;
     //Point3f corner;
     //Vector3f diagonal;
 
 
     std::vector<BMC<Vector3f, SampledSpectrum> *> bmc_list;
-    uint32_t num_bmcs = 1;
+    uint32_t num_bmcs = 10;
 };
 
 }  // namespace pbrt
