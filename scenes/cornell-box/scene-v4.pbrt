@@ -1,4 +1,4 @@
-Integrator "direct" # "integer maxdepth" [1]
+Integrator "area" # "integer maxdepth" [1]
 
 Transform [ 1 -0 -0 -0 -0 1 -0 -0 -0 -0 -1 -0 -0 -1 6.8 1  ]
 # Sampler "stratified"
@@ -14,8 +14,10 @@ PixelFilter "triangle"
 Film "rgb"
     "string filename" [ "../scenes/cornell-box/TungstenRender.exr" ]
     #"integer pixelbounds" [600 601 600 602]
-    "integer yresolution" [ 1024 ]
-    "integer xresolution" [ 1024 ]
+    #"integer yresolution" [ 1024 ]
+    #"integer xresolution" [ 1024 ]
+    "integer yresolution" [ 8 ]
+    "integer xresolution" [ 8 ]
 Camera "perspective"
     "float fov" [ 19.5 ]
 

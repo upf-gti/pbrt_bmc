@@ -561,7 +561,6 @@ class DirectIntegrator : public RayIntegrator {
     // Having very low values losses light intensity because currently our prior (expected
     // mean) is 0
     uint32_t num_shading_samples = 64;
-    std::vector<Vector3f> observation_positions;
 };
 
 // BayisianMonteCarloIntegrator Definition
@@ -592,7 +591,7 @@ class DirectBMCIntegrator : public RayIntegrator {
     // Number of cached sample directions in the hemisphere
     // Having very low values losses light intensity because currently our prior (expected
     // mean) is 0
-    uint32_t num_shading_samples = 64;
+    uint32_t num_shading_samples = 32;
 };
 
 // AreaIntegrator CMC Definition
