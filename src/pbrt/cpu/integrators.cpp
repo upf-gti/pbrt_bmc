@@ -4020,21 +4020,21 @@ std::unique_ptr<DirectBMCIntegrator> DirectBMCIntegrator::Create(
 
 // Area CMC Integrator
 
-static Vector3f random_on_area(const void *data) {
-    const Vector3f *params = static_cast<const Vector3f *>(data);
-    Vector3f corner = params[0];
-     Vector3f diagonal = params[1];
-
-    Float r1 = rand() / (Float)RAND_MAX;
-    Float r2 = rand() / (Float)RAND_MAX;
-
-    return Vector3f(corner.x + r1 * diagonal.x, corner.y, corner.z + r2 * diagonal.z);
-}
-
 struct sSamplingParams_area {
     Vector3f corner;
     Vector3f diagonal;
 };
+
+inline Vector3f random_on_area(const void *data) {
+    const sSamplingParams_area *params = static_cast<const sSamplingParams_area *>(data);
+    Vector3f corner = params->corner;
+    Vector3f diagonal = params->diagonal;
+
+    Float r1 = rand() / (RAND_MAX + 1.0);
+    Float r2 = rand() / (RAND_MAX + 1.0);
+
+    return Vector3f(corner.x + r1 * diagonal.x, corner.y, corner.z + r2 * diagonal.z);
+}
 
 AreaIntegrator::AreaIntegrator(Camera camera,
                                Sampler sampler, Primitive aggregate,
@@ -4043,12 +4043,13 @@ AreaIntegrator::AreaIntegrator(Camera camera,
       lightSampler(lights, Allocator()) {}
 
 SampledSpectrum AreaIntegrator::Li(RayDifferential ray, SampledWavelengths &lambda,
-                                     Sampler sampler, ScratchBuffer &scratchBuffer,
-                                     VisibleSurface *visibleSurface) const {
+                                   Sampler sampler, ScratchBuffer &scratchBuffer,
+                                   VisibleSurface *visibleSurface) const {
     pstd::optional<ShapeIntersection> si, random_si;
     si = Intersect(ray);
 
-    if (!si) return SampledSpectrum(0.0f);
+    if (!si)
+        return SampledSpectrum(0.0f);
 
     SampledSpectrum L = si->intr.Le(-ray.d, lambda);
 
@@ -4059,23 +4060,23 @@ SampledSpectrum AreaIntegrator::Li(RayDifferential ray, SampledWavelengths &lamb
     SurfaceInteraction &isect = si->intr;
 
     BSDF bsdf = isect.GetBSDF(ray, lambda, camera, scratchBuffer, sampler);
-    if (!bsdf) return SampledSpectrum(0.0f);
-    
+    // if (!bsdf) return SampledSpectrum(0.0f);
+
     Point3f x;
     x = isect.p();
 
     Vector3f wo = -ray.d;
-    
 
     // METHOD 1
 
-    //for (uint32_t i = 0; i < num_shading_samples; i++) {
-    //    
-    //    pstd::optional<SampledLight> sampledLight = lightSampler.Sample(sampler.Get1D());
-    //    if (!sampledLight)
-    //        continue;
-    //    Point2f u_point = {rand() / (float)RAND_MAX, rand() / (float)RAND_MAX};
-    //    pstd::optional<LightLiSample> ls = sampledLight->light.SampleLi(isect, u_point, lambda);
+    // for (uint32_t i = 0; i < num_shading_samples; i++) {
+    //
+    //     pstd::optional<SampledLight> sampledLight =
+    //     lightSampler.Sample(sampler.Get1D()); if (!sampledLight)
+    //         continue;
+    //     Point2f u_point = {rand() / (float)RAND_MAX, rand() / (float)RAND_MAX};
+    //     pstd::optional<LightLiSample> ls = sampledLight->light.SampleLi(isect, u_point,
+    //     lambda);
 
     //    if (ls && ls->L && ls->pdf > 0) {
     //        f = bsdf.f(wo, ls->wi) * Dot(ls->wi, isect.shading.n);
@@ -4083,48 +4084,14 @@ SampledSpectrum AreaIntegrator::Li(RayDifferential ray, SampledWavelengths &lamb
     //            L += f * ls->L / (sampledLight->p * ls->pdf);
     //    }
     //}
-    
-
-    // METHOD 2
-
-    //for (uint32_t i = 0; i < num_shading_samples; i++) {
-    //    Float u_light = sampler.Get1D();
-    //    pstd::optional<SampledLight> sampledLight = lightSampler.Sample(u_light);
-
-    //    if (sampledLight)
-    //    {
-    //        Point2f u_point = sampler.Get2D();
-    //        pstd::optional<LightLiSample> ls = sampledLight->light.SampleLi(isect, u_point, lambda);
-
-    //        if (ls && ls->L && ls->pdf > 0) {
-    //            Vector3f wi = Normalize(Vector3f(ls->pLight.p() - x));
-    //            SampledSpectrum f = bsdf.f(wo, wi) * Dot(wi, isect.shading.n);
-    //            if (f && Unoccluded(isect, ls->pLight))
-    //            {
-    //                Vector3f diag = sampledLight->light.Bounds()->bounds.Diagonal();
-    //                Float area = diag.x * diag.y + diag.x * diag.z + diag.y * diag.z;
-    //                Float pdf = 1.0 / area;
-    //                Float geo = Dot(-wi, ls->pLight.n) / LengthSquared(Vector3f(ls->pLight.p() - x));
-    //                L += f * ls->L * geo / pdf;
-    //            }
-    //        }
-    //        else {
-    //            return SampledSpectrum(0.0f);
-    //        }
-    //    } else {
-    //        printf("There is no light to sample!\n");
-    //    }
-    //}
-
-
-    // METHOD 3
 
     SampledSpectrum Le;
     Normal3f normal;
     Vector3f corner, diagonal;
     pstd::optional<SampledLight> sampledLight = lightSampler.Sample(0.4f);
     if (sampledLight) {
-        pstd::optional<LightLiSample> ls = sampledLight->light.SampleLi(isect, {0.4f, 0.4f}, lambda);
+        pstd::optional<LightLiSample> ls =
+            sampledLight->light.SampleLi(isect, {0.4f, 0.4f}, lambda);
         if (ls && ls->L && ls->pdf > 0) {
             normal = ls->pLight.n;
             Point3f c = sampledLight->light.Bounds()->bounds.pMin;
@@ -4134,8 +4101,6 @@ SampledSpectrum AreaIntegrator::Li(RayDifferential ray, SampledWavelengths &lamb
             return SampledSpectrum(0.0f);
         }
     }
-    
-
     sSamplingParams_area *sampling_params = new sSamplingParams_area();
     sampling_params->corner = corner;
     sampling_params->diagonal = diagonal;
@@ -4145,32 +4110,23 @@ SampledSpectrum AreaIntegrator::Li(RayDifferential ray, SampledWavelengths &lamb
 
     for (uint32_t i = 0; i < num_shading_samples; i++) {
 
-        Vector3f random_point = random_on_area(&sampling_params);
-        //Interaction ls_pLight = Interaction(Point3f(random_point.x, random_point.y, random_point.z), Normal3f(normal.x, normal.y, normal.z), 0.0f, nullptr);
-
+        Vector3f random_point = random_on_area(sampling_params);
         Vector3f wi = Normalize(random_point - Vector3f(x.x, x.y, x.z));
-        SampledSpectrum f = bsdf.f(wo, wi) * Dot(wi, isect.shading.n);
-
+        Float maxT = Length(random_point - Vector3f(x.x, x.y, x.z));
         RayDifferential nextRay = isect.SpawnRay(wi);
-        random_si = Intersect(nextRay);
-        if (!random_si) continue;
-        SampledSpectrum Le = random_si->intr.Le(-nextRay.d, lambda);
 
-        //if (f && (L[0] > 0.0f || L[1] > 0.0f || L[2] > 0.0f)) {
-        ////if (f && Unoccluded(isect, ls_pLight)) {
-        //    Float area = diagonal.x * diagonal.y + diagonal.x * diagonal.z + diagonal.y * diagonal.z;
-        //    Float pdf = 1.0 / area;
-        //    Float geo = Dot(-wi, normal) / LengthSquared(random_point - Vector3f(x.x, x.y, x.z));
-        //                
-        //    L += f * Le * geo / pdf;
-        //}
+        if (!IntersectP(nextRay, maxT - 0.01)) {
+            Float geo = Dot(-wi, normal) / LengthSquared(random_point - Vector3f(x.x, x.y, x.z));
+            SampledSpectrum f = bsdf.f(wo, wi) * Dot(wi, isect.shading.n);
 
-        Float geo = Dot(-wi, normal) / LengthSquared(random_point - Vector3f(x.x,x.y, x.z));
-        
-        L += f * Le * geo / pdf;
+            random_si = Intersect(nextRay);
+            if (!random_si)
+                continue;
+            L += f * random_si->intr.Le(-nextRay.d, lambda) * geo / pdf;
+
+        }
     }
-
-    L /= (num_shading_samples);
+    L /= num_shading_samples;
 
     if (L[0] < 0.0f || L[1] < 0.0f || L[2] < 0.0f)
         return SampledSpectrum(0.0f);
