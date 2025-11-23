@@ -1,4 +1,4 @@
-Integrator "area" # "integer maxdepth" [1]
+Integrator "areabmc" # "integer maxdepth" [1]
 
 Transform [ 1 -0 -0 -0 -0 1 -0 -0 -0 -0 -1 -0 -0 -1 6.8 1  ]
 # Sampler "stratified"

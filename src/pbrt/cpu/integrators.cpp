@@ -4045,26 +4045,24 @@ AreaIntegrator::AreaIntegrator(Camera camera,
 SampledSpectrum AreaIntegrator::Li(RayDifferential ray, SampledWavelengths &lambda,
                                    Sampler sampler, ScratchBuffer &scratchBuffer,
                                    VisibleSurface *visibleSurface) const {
+    
     pstd::optional<ShapeIntersection> si, random_si;
     si = Intersect(ray);
 
     if (!si)
         return SampledSpectrum(0.0f);
 
-    SampledSpectrum L = si->intr.Le(-ray.d, lambda);
+    SampledSpectrum Le = si->intr.Le(-ray.d, lambda);
 
     // chech if there is emitted light
-    if (L[0] > 0.0f || L[1] > 0.0f || L[2] > 0.0f)
-        return L;
+    if (Le.MaxComponentValue() > 0.0f)
+        return Le;
 
     SurfaceInteraction &isect = si->intr;
 
     BSDF bsdf = isect.GetBSDF(ray, lambda, camera, scratchBuffer, sampler);
-    // if (!bsdf) return SampledSpectrum(0.0f);
 
-    Point3f x;
-    x = isect.p();
-
+    Point3f x = isect.p();
     Vector3f wo = -ray.d;
 
     // METHOD 1
@@ -4085,13 +4083,13 @@ SampledSpectrum AreaIntegrator::Li(RayDifferential ray, SampledWavelengths &lamb
     //    }
     //}
 
-    SampledSpectrum Le;
+    SampledSpectrum L(0.0f);
     Normal3f normal;
     Vector3f corner, diagonal;
-    pstd::optional<SampledLight> sampledLight = lightSampler.Sample(0.4f);
+    pstd::optional<SampledLight> sampledLight = lightSampler.Sample(0.0f);
     if (sampledLight) {
-        pstd::optional<LightLiSample> ls =
-            sampledLight->light.SampleLi(isect, {0.4f, 0.4f}, lambda);
+
+        pstd::optional<LightLiSample> ls = sampledLight->light.SampleLi(isect, {0.0f, 0.0f}, lambda);
         if (ls && ls->L && ls->pdf > 0) {
             normal = ls->pLight.n;
             Point3f c = sampledLight->light.Bounds()->bounds.pMin;
@@ -4100,7 +4098,11 @@ SampledSpectrum AreaIntegrator::Li(RayDifferential ray, SampledWavelengths &lamb
         } else {
             return SampledSpectrum(0.0f);
         }
+    } else {
+        printf("No light sampled\n");
+        return SampledSpectrum(0.0f);
     }
+
     sSamplingParams_area *sampling_params = new sSamplingParams_area();
     sampling_params->corner = corner;
     sampling_params->diagonal = diagonal;
@@ -4113,23 +4115,25 @@ SampledSpectrum AreaIntegrator::Li(RayDifferential ray, SampledWavelengths &lamb
         Vector3f random_point = random_on_area(sampling_params);
         Vector3f wi = Normalize(random_point - Vector3f(x.x, x.y, x.z));
         Float maxT = Length(random_point - Vector3f(x.x, x.y, x.z));
-        RayDifferential nextRay = isect.SpawnRay(wi);
+        Ray nextRay = isect.SpawnRay(wi);
 
-        if (!IntersectP(nextRay, maxT - 0.01)) {
-            Float geo = Dot(-wi, normal) / LengthSquared(random_point - Vector3f(x.x, x.y, x.z));
+        if (!IntersectP(nextRay, maxT - 1e-4)) {
             SampledSpectrum f = bsdf.f(wo, wi) * Dot(wi, isect.shading.n);
-
+            Float geo = Dot(-wi, normal) / LengthSquared(random_point - Vector3f(x.x, x.y, x.z));
+            
             random_si = Intersect(nextRay);
-            if (!random_si)
-                continue;
-            L += f * random_si->intr.Le(-nextRay.d, lambda) * geo / pdf;
-
+            if (!random_si) continue;
+            Le = random_si->intr.Le(-wi, lambda);
+            L += f * random_si->intr.Le(-wi, lambda) * geo / pdf;
         }
     }
     L /= num_shading_samples;
 
-    if (L[0] < 0.0f || L[1] < 0.0f || L[2] < 0.0f)
+    if (L.MinComponentValue() < 0.0f) {
+        printf("Negative radiance value!\n");
         return SampledSpectrum(0.0f);
+    }
+        
     return L;
 }
 
@@ -4151,11 +4155,6 @@ std::unique_ptr<AreaIntegrator> AreaIntegrator::Create(
 
 // Area BMC Integrator
 
-//struct sSamplingParams_area {
-//    Vector3f corner;
-//    //Vector3f diagonal;
-//};
-
 AreaIntegratorBMC::AreaIntegratorBMC(Camera camera,
                                      Sampler sampler, Primitive aggregate,
                                      std::vector<Light> lights)
@@ -4168,59 +4167,61 @@ SampledSpectrum AreaIntegratorBMC::Li(RayDifferential ray, SampledWavelengths &l
 
     pstd::optional<ShapeIntersection> si;
     si = Intersect(ray);
-
     if (!si) return SampledSpectrum(0.0f);
+    
     SurfaceInteraction &isect = si->intr;
-    SampledSpectrum L = isect.Le(-ray.d, lambda);
+    SampledSpectrum Le = isect.Le(-ray.d, lambda);
     // chech if there is emitted light
-    if (L[0] > 0.0f || L[1] > 0.0f || L[2] > 0.0f) {
-        return L;
-    }
+    if (Le.MaxComponentValue() > 0.0f)
+        return Le;
         
 
     BSDF bsdf = isect.GetBSDF(ray, lambda, camera, scratchBuffer, sampler);
     if (!bsdf) return SampledSpectrum(0.0f);
 
-    Point3f x;
-    x = isect.p();
-
+    Point3f x = isect.p();
     Vector3f wo = -ray.d;
 
     uint32_t randomGP = rand() % num_bmcs;
     BMC<Vector3f, SampledSpectrum> *bmc = bmc_list[randomGP];
 
     std::vector<SampledSpectrum> radianceSamples;
-    SampledSpectrum Le;
-    Normal3f n;
+    
+    Normal3f light_normal;
     pstd::optional<SampledLight> sampledLight = lightSampler.Sample(0.0f);
     if (sampledLight) {
         pstd::optional<LightLiSample> ls = sampledLight->light.SampleLi(isect, {0.0f, 0.0f}, lambda);
         if (ls && ls->L && ls->pdf > 0) {
-            n = ls->pLight.n;
+            light_normal = ls->pLight.n;
             Le = ls->L;
         } else {
             return SampledSpectrum(0.0f);
         }
     }
 
+    Vector3f diag = sampledLight->light.Bounds()->bounds.Diagonal();
+    Float area = diag.x * diag.y + diag.x * diag.z + diag.y * diag.z;
+    Float pdf = 1.0 / area;
+
     for (uint32_t i = 0; i < num_shading_samples; i++) {
         pstd::optional<SampledLight> sampledLight = lightSampler.Sample(sampler.Get1D());
         
         if (sampledLight) {
-            Vector3f y = bmc->get_gaussian_process()->get_observation(i);
+            Vector3f area_point = bmc->get_gaussian_process()->get_observation(i);
 
-            Interaction ls_pLight = Interaction(Point3f(y.x, y.y, y.z), n, 0.0f, nullptr);
+            //Interaction ls_pLight =
+            //    Interaction(Point3f(y.x, y.y, y.z), light_normal, 0.0f, nullptr);
 
-            Vector3f wi = Normalize(y - Vector3f(x.x, x.y, x.z));
-
+            Vector3f wi = Normalize(area_point - Vector3f(x.x, x.y, x.z));
             SampledSpectrum f = bsdf.f(wo, wi) * Dot(wi, isect.shading.n);
+            Float maxT = Length(area_point - Vector3f(x.x, x.y, x.z));
+            Ray nextRay = isect.SpawnRay(wi);
 
             // Visibility function
-            if (f && Unoccluded(isect, ls_pLight)) {
-                Vector3f diag = sampledLight->light.Bounds()->bounds.Diagonal();
-                Float area = diag.x * diag.y + diag.x * diag.z + diag.y * diag.z;
-                Float pdf = 1.0 / area;
-                Float geo = Dot(-wi, n) / LengthSquared(y - Vector3f(x.x, x.y, x.z));
+            if (!IntersectP(nextRay, maxT - 1e-4)) {
+                Float geo = Dot(-wi, light_normal) /
+                            LengthSquared(area_point - Vector3f(x.x, x.y, x.z));
+
                 SampledSpectrum p = f * Le * geo / pdf;
                 radianceSamples.push_back(p);
             } else {
@@ -4229,9 +4230,14 @@ SampledSpectrum AreaIntegratorBMC::Li(RayDifferential ray, SampledWavelengths &l
             
         }
     }
-        
+    SampledSpectrum L(0.0f);
     bmc->compute_integral(radianceSamples, L);
     
+    if (L.MinComponentValue() < 0.0f) {
+        printf("Negative radiance value!\n");
+        return SampledSpectrum(0.0f);
+    }
+
     return L;
 }
 
@@ -4252,12 +4258,12 @@ std::unique_ptr<AreaIntegratorBMC> AreaIntegratorBMC::Create(
 
     std::vector<Vector3f> sample_points;
     pstd::optional<SampledLight> sampledLight = area_integrator->get_light_sampler().Sample(0.0f);
-    Point3f c = sampledLight->light.Bounds()->bounds.pMin;
-    Vector3f d = sampledLight->light.Bounds()->bounds.Diagonal();
+    Point3f corner = sampledLight->light.Bounds()->bounds.pMin;
+    Vector3f diagonal = sampledLight->light.Bounds()->bounds.Diagonal();
    
     for (uint32_t i = 0; i < area_integrator->num_bmcs; ++i) {
         pbrt_kernel::sAreaParams *area_params = new pbrt_kernel::sAreaParams();
-        area_params->h = Length(d);
+        area_params->h = Length(diagonal);
 
         GaussianProcess<Vector3f, SampledSpectrum>::sKernelInfo kernel_info;
         kernel_info.kernel = pbrt_kernel::kernel_area;
@@ -4274,12 +4280,12 @@ std::unique_ptr<AreaIntegratorBMC> AreaIntegratorBMC::Create(
         srand(1998 + i);
 
         sSamplingParams_area *sampling_params = new sSamplingParams_area();
-        sampling_params->corner = Vector3f(c[0], c[1], c[2]);
-        //sampling_params->diagonal = d;
+        sampling_params->corner = Vector3f(corner[0], corner[1], corner[2]);
+        sampling_params->diagonal = diagonal;
         
         // Generate x random directions in sphere and store in array
         for (uint32_t s_idx = 0; s_idx < area_integrator->num_shading_samples; s_idx++) {
-            sample_points.push_back(random_on_area(&sampling_params));
+            sample_points.push_back(random_on_area(sampling_params));
         }
         
         // Fill the GP instance with the array of directions (observation points)
